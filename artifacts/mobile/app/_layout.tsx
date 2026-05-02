@@ -20,6 +20,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider, useApp } from "@/context/AppContext";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ClinicalAuthProvider, useClinicalAuth } from "@/context/ClinicalAuthContext";
 
 SplashScreen.preventAutoHideAsync();
@@ -27,32 +28,30 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function NavigationGuard() {
-  const { isOnboarded, isLoading: appLoading } = useApp();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isLoading: appLoading } = useApp();
   const { clinicalStaff, isLoading: clinicalLoading } = useClinicalAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    if (appLoading || clinicalLoading) return;
+    if (authLoading || appLoading || clinicalLoading) return;
 
     const inClinicalTabs = segments[0] === "(clinical-tabs)";
     const inClinicalLogin = segments[0] === "clinical-login";
+    const inLogin = segments[0] === "login";
+    const inRegister = segments[0] === "register";
     const inOnboarding = segments[0] === "onboarding";
+    const inAuthFlow = inLogin || inRegister || inOnboarding || inClinicalLogin;
 
     if (clinicalStaff) {
-      if (!inClinicalTabs) {
-        router.replace("/(clinical-tabs)/cl-schedule");
-      }
-    } else if (!isOnboarded) {
-      if (!inOnboarding && !inClinicalLogin) {
-        router.replace("/onboarding");
-      }
+      if (!inClinicalTabs) router.replace("/(clinical-tabs)/cl-schedule");
+    } else if (!isAuthenticated) {
+      if (!inAuthFlow) router.replace("/login");
     } else {
-      if (inOnboarding || inClinicalTabs) {
-        router.replace("/(tabs)");
-      }
+      if (inAuthFlow || inClinicalTabs) router.replace("/(tabs)");
     }
-  }, [isOnboarded, appLoading, clinicalStaff, clinicalLoading, segments]);
+  }, [isAuthenticated, authLoading, appLoading, clinicalStaff, clinicalLoading, segments]);
 
   return null;
 }
@@ -62,6 +61,8 @@ function RootLayoutNav() {
     <>
       <NavigationGuard />
       <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(clinical-tabs)" />
@@ -104,17 +105,19 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <AppProvider>
-          <ClinicalAuthProvider>
-            <QueryClientProvider client={queryClient}>
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <KeyboardProvider>
-                  <RootLayoutNav />
-                </KeyboardProvider>
-              </GestureHandlerRootView>
-            </QueryClientProvider>
-          </ClinicalAuthProvider>
-        </AppProvider>
+        <AuthProvider>
+          <AppProvider>
+            <ClinicalAuthProvider>
+              <QueryClientProvider client={queryClient}>
+                <GestureHandlerRootView style={{ flex: 1 }}>
+                  <KeyboardProvider>
+                    <RootLayoutNav />
+                  </KeyboardProvider>
+                </GestureHandlerRootView>
+              </QueryClientProvider>
+            </ClinicalAuthProvider>
+          </AppProvider>
+        </AuthProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

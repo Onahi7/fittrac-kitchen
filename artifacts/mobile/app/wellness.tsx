@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "@/context/AppContext";
+import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
 const SPECIALISTS = [
@@ -91,6 +92,7 @@ export default function WellnessScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { bookConsultation, consultations, profile } = useApp();
+  const { token } = useAuth();
 
   const [selectedSpecialist, setSelectedSpecialist] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState("Today");
@@ -107,15 +109,31 @@ export default function WellnessScreen() {
     if (Platform.OS !== "web") {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-    await bookConsultation({
-      specialistType: specialist.type,
-      specialistName: specialist.name,
-      date: selectedDay,
-      time: selectedSlot,
-      price: specialist.price,
-      notes: "",
-    });
-    await new Promise((r) => setTimeout(r, 800));
+    try {
+      if (token) {
+        await fetch("/api/auth/book-consultation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            specialistType: specialist.type,
+            specialistName: specialist.name,
+            date: selectedDay,
+            time: selectedSlot,
+            price: specialist.price,
+            notes: "",
+          }),
+        });
+      }
+      await bookConsultation({
+        specialistType: specialist.type,
+        specialistName: specialist.name,
+        date: selectedDay,
+        time: selectedSlot,
+        price: specialist.price,
+        notes: "",
+      });
+    } catch {}
+    await new Promise((r) => setTimeout(r, 600));
     setBooking(false);
     setBooked(true);
   };

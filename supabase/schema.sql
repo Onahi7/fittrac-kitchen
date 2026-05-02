@@ -19,7 +19,19 @@ CREATE TABLE IF NOT EXISTS clinical_staff (
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Patients
+-- Mobile App Users
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL,
+  email         TEXT UNIQUE NOT NULL,
+  phone         TEXT,
+  password_hash TEXT NOT NULL,
+  conditions    TEXT[]  DEFAULT '{}',
+  patient_id    TEXT,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Patients (created from mobile users who book consultations)
 CREATE TABLE IF NOT EXISTS patients (
   id                        TEXT PRIMARY KEY,
   name                      TEXT NOT NULL,
@@ -48,6 +60,23 @@ CREATE TABLE IF NOT EXISTS patients (
   created_at                TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Add FK from users to patients (after patients table exists)
+ALTER TABLE users ADD CONSTRAINT fk_users_patient FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE SET NULL NOT VALID;
+
+-- Orders (from mobile app, linked to user)
+CREATE TABLE IF NOT EXISTS orders (
+  id             TEXT PRIMARY KEY,
+  user_id        TEXT REFERENCES users(id) ON DELETE SET NULL,
+  items          JSONB DEFAULT '[]',
+  fulfillment    TEXT NOT NULL CHECK (fulfillment IN ('delivery','pickup')),
+  address        TEXT,
+  total          INTEGER NOT NULL,
+  payment_method TEXT,
+  delivery_date  TEXT,
+  status         TEXT DEFAULT 'confirmed' CHECK (status IN ('confirmed','preparing','ready','delivered','cancelled')),
+  created_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Consultations
 CREATE TABLE IF NOT EXISTS consultations (
   id               TEXT PRIMARY KEY,
@@ -73,8 +102,8 @@ CREATE TABLE IF NOT EXISTS lab_results (
   value            TEXT,
   unit             TEXT,
   reference_range  TEXT,
-  flag             TEXT,   -- 'critical' | 'elevated' | null
-  status           TEXT,   -- 'critical' | 'abnormal' | 'normal'
+  flag             TEXT,
+  status           TEXT,
   date             DATE,
   uploaded_at      DATE,
   notes            TEXT,
@@ -126,7 +155,9 @@ CREATE TABLE IF NOT EXISTS prescriptions (
 
 -- Disable Row Level Security (service role bypasses anyway)
 ALTER TABLE clinical_staff  DISABLE ROW LEVEL SECURITY;
+ALTER TABLE users            DISABLE ROW LEVEL SECURITY;
 ALTER TABLE patients         DISABLE ROW LEVEL SECURITY;
+ALTER TABLE orders           DISABLE ROW LEVEL SECURITY;
 ALTER TABLE consultations    DISABLE ROW LEVEL SECURITY;
 ALTER TABLE lab_results      DISABLE ROW LEVEL SECURITY;
 ALTER TABLE meal_plans       DISABLE ROW LEVEL SECURITY;

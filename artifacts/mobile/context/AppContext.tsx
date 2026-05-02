@@ -19,6 +19,7 @@ import type {
   WaterLog,
   WeightLog,
 } from "@/constants/types";
+import { useAuth } from "@/context/AuthContext";
 
 interface AppContextValue {
   profile: UserProfile;
@@ -152,6 +153,7 @@ function seedWaterLogs(): WaterLog[] {
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const { user, token } = useAuth();
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
   const [basket, setBasket] = useState<BasketItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -166,6 +168,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [sseConnected, setSseConnected] = useState(false);
 
   useEffect(() => { loadData(); }, []);
+
+  useEffect(() => {
+    if (user && user.conditions && user.conditions.length > 0) {
+      setProfile((prev) => {
+        if (JSON.stringify(prev.conditions) !== JSON.stringify(user.conditions)) {
+          const updated = { ...prev, isOnboarded: true, conditions: user.conditions as Condition[] };
+          AsyncStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(updated)).catch(() => {});
+          return updated;
+        }
+        return { ...prev, isOnboarded: true };
+      });
+    } else if (user) {
+      setProfile((prev) => ({ ...prev, isOnboarded: true }));
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (token) {
+      fetch("/api/auth/orders", { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.orders && data.orders.length > 0) {
+            const mapped: Order[] = data.orders.map((o: any) => ({
+              id: o.id,
+              items: o.items ?? [],
+              createdAt: o.created_at,
+              deliveryDate: o.delivery_date ?? "",
+              status: o.status,
+              fulfillment: o.fulfillment,
+              address: o.address ?? "",
+              total: o.total,
+              paymentMethod: o.payment_method ?? "",
+            }));
+            setOrders(mapped);
+            AsyncStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(mapped)).catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }
+  }, [token]);
 
   useEffect(() => {
     let active = true;
@@ -315,8 +357,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const newOrders = [order, ...orders];
     saveOrders(newOrders);
     setBasket([]);
+    if (token) {
+      fetch("/api/auth/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ items: order.items, fulfillment, address, total, paymentMethod, deliveryDate }),
+      }).catch(() => {});
+    }
     return order;
-  }, [basket, orders]);
+  }, [basket, orders, token]);
 
   const logWeight = useCallback(async (weight: number) => {
     const today = new Date().toISOString().split("T")[0];
