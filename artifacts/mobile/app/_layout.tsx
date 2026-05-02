@@ -52,11 +52,11 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="meal/[id]" options={{ presentation: "card" }} />
         <Stack.Screen name="checkout" options={{ presentation: "card" }} />
-        <Stack.Screen
-          name="order-success"
-          options={{ presentation: "fullScreenModal" }}
-        />
+        <Stack.Screen name="order-success" options={{ presentation: "fullScreenModal" }} />
         <Stack.Screen name="wellness" options={{ presentation: "card" }} />
+        <Stack.Screen name="exercise" options={{ presentation: "card" }} />
+        <Stack.Screen name="water" options={{ presentation: "card" }} />
+        <Stack.Screen name="notifications" options={{ presentation: "card" }} />
       </Stack>
     </>
   );

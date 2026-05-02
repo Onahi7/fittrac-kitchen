@@ -70,6 +70,20 @@ export interface NutritionLog {
   label?: string;
 }
 
+export interface ExerciseLog {
+  id: string;
+  date: string;
+  type: string;
+  duration: number;
+  intensity: "Low" | "Medium" | "High";
+  caloriesBurned: number;
+}
+
+export interface WaterLog {
+  date: string;
+  glasses: number;
+}
+
 export interface Consultation {
   id: string;
   specialistType: string;
@@ -79,4 +93,11 @@ export interface Consultation {
   status: "upcoming" | "completed" | "cancelled";
   price: number;
   notes?: string;
+}
+
+export interface NotificationSetting {
+  id: string;
+  label: string;
+  enabled: boolean;
+  time?: string;
 }
