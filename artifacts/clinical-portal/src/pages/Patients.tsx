@@ -19,9 +19,9 @@ const conditionColors: Record<string, string> = {
 export default function Patients() {
   const [search, setSearch] = useState("");
 
-  const { data: patients, isLoading } = useQuery({
+  const { data: patients, isLoading } = useQuery<any[]>({
     queryKey: ["patients"],
-    queryFn: () => fetchWithAuth("/api/clinical-staff/patients"),
+    queryFn: () => fetchWithAuth("/api/clinical-staff/patients").then((d) => d.patients ?? []),
   });
 
   const filteredPatients = patients?.filter((p: any) => 

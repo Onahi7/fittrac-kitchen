@@ -1,18 +1,5 @@
-import { useState } from "react";
-
-const CONSULTANTS = [
-  { name: "Dr. Adaeze Okonkwo", type: "Nutritionist", sessions: 312, rating: 4.9, revenue: 2652000, condition: "Weight Loss, Diabetes", status: "active", emoji: "🩺", id: "dr-adaeze" },
-  { name: "Dr. Emeka Nwosu", type: "Registered Dietitian", sessions: 228, rating: 4.8, revenue: 1641600, condition: "Hypertension, Liver", status: "active", emoji: "❤️", id: "dr-emeka" },
-  { name: "Coach Fatima Al-Rashid", type: "Health Coach", sessions: 480, rating: 4.9, revenue: 2640000, condition: "Weight Loss, Allergies", status: "active", emoji: "⚡", id: "coach-fatima" },
-  { name: "Dr. Bola Fashola", type: "General Practitioner", sessions: 156, rating: 4.7, revenue: 1872000, condition: "Liver, Hypertension, Diabetes", status: "active", emoji: "🌿", id: "dr-bola" },
-];
-
-const UPCOMING = [
-  { id: "CON-1042", patient: "A.O.", specialist: "Dr. Adaeze Okonkwo", specialistId: "dr-adaeze", date: "Today", time: "2:00 PM", type: "Nutritionist", price: 8500, status: "scheduled" },
-  { id: "CON-1041", patient: "E.N.", specialist: "Coach Fatima Al-Rashid", specialistId: "coach-fatima", date: "Today", time: "4:00 PM", type: "Health Coach", price: 5500, status: "scheduled" },
-  { id: "CON-1040", patient: "B.F.", specialist: "Dr. Emeka Nwosu", specialistId: "dr-emeka", date: "Tomorrow", time: "10:00 AM", type: "Dietitian", price: 7200, status: "scheduled" },
-  { id: "CON-1039", patient: "C.U.", specialist: "Dr. Bola Fashola", specialistId: "dr-bola", date: "Friday", time: "11:00 AM", type: "GP", price: 12000, status: "scheduled" },
-];
+import { useEffect, useState } from "react";
+import { useAdminFetch } from "@/contexts/AuthContext";
 
 const COMMON_TESTS = [
   "Fasting Blood Sugar (FBS)", "HbA1c", "Lipid Profile (Cholesterol)",
@@ -23,14 +10,40 @@ const COMMON_TESTS = [
 
 interface Medication { name: string; dosage: string; frequency: string; duration: string; instructions: string; }
 
-function ConsultationRoom({ session, onClose }: { session: typeof UPCOMING[0]; onClose: () => void }) {
+interface ClinicalStaff {
+  id: string; name: string; title: string; role: string;
+  specialization: string; badge: string;
+  sessions: number; patients: number;
+}
+
+interface ConsultationSession {
+  id: string; patientId: string; patientName: string;
+  doctorId: string | null; nutritionistId: string | null; staffId: string | null;
+  staffName: string; staffRole: string;
+  date: string; time: string; duration: number;
+  status: string; type: string; chiefComplaint: string;
+}
+
+type AdminFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
+function roleEmoji(role: string) {
+  return role === "doctor" ? "🩺" : "🥗";
+}
+
+function ConsultationRoom({
+  session, onClose, apiFetch,
+}: {
+  session: ConsultationSession;
+  onClose: () => void;
+  apiFetch: AdminFetch;
+}) {
   const [activeTab, setActiveTab] = useState<"call" | "tests" | "prescription">("call");
   const [selectedTests, setSelectedTests] = useState<string[]>([]);
+  const [testsSending, setTestsSending] = useState(false);
   const [testsSent, setTestsSent] = useState(false);
   const [callActive, setCallActive] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(true);
-  const [callDuration, setCallDuration] = useState("4:23");
 
   const [diagnosis, setDiagnosis] = useState("");
   const [medications, setMedications] = useState<Medication[]>([
@@ -38,21 +51,64 @@ function ConsultationRoom({ session, onClose }: { session: typeof UPCOMING[0]; o
   ]);
   const [followUp, setFollowUp] = useState("");
   const [doctorNotes, setDoctorNotes] = useState("");
+  const [rxSaving, setRxSaving] = useState(false);
   const [rxSaved, setRxSaved] = useState(false);
+  const [rxError, setRxError] = useState("");
+  const [testError, setTestError] = useState("");
 
-  const specialist = CONSULTANTS.find((c) => c.id === session.specialistId);
-
-  const toggleTest = (t: string) => {
+  const toggleTest = (t: string) =>
     setSelectedTests((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]);
-  };
 
   const addMed = () => setMedications((prev) => [...prev, { name: "", dosage: "", frequency: "", duration: "", instructions: "" }]);
   const removeMed = (i: number) => setMedications((prev) => prev.filter((_, idx) => idx !== i));
-  const updateMed = (i: number, field: keyof Medication, val: string) => {
+  const updateMed = (i: number, field: keyof Medication, val: string) =>
     setMedications((prev) => prev.map((m, idx) => idx === i ? { ...m, [field]: val } : m));
+
+  const handleSendTests = async () => {
+    if (!selectedTests.length) return;
+    setTestsSending(true);
+    setTestError("");
+    try {
+      const res = await apiFetch("/api/admin/test-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patientId: session.patientId, tests: selectedTests }),
+      });
+      if (!res.ok) throw new Error("Failed to send test requests");
+      setTestsSent(true);
+    } catch {
+      setTestError("Could not send tests. Check that the patient exists in the database.");
+    } finally {
+      setTestsSending(false);
+    }
   };
 
-  const handleSaveRx = () => { setRxSaved(true); setTimeout(() => setRxSaved(false), 2500); };
+  const handleSaveRx = async () => {
+    if (!diagnosis) return;
+    setRxSaving(true);
+    setRxError("");
+    try {
+      const res = await apiFetch("/api/admin/prescriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId: session.patientId,
+          doctorId: session.doctorId,
+          diagnosis,
+          medications: medications.filter((m) => m.name),
+          notes: doctorNotes,
+          validUntil: followUp || null,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to save prescription");
+      setRxSaved(true);
+      setTimeout(() => setRxSaved(false), 3000);
+    } catch {
+      setRxError("Could not save prescription. Check that the patient exists in the database.");
+    } finally {
+      setRxSaving(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -60,18 +116,19 @@ function ConsultationRoom({ session, onClose }: { session: typeof UPCOMING[0]; o
         <div className="flex items-center justify-between p-5 border-b border-border bg-primary/5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-lg">
-              {specialist?.emoji}
+              {roleEmoji(session.staffRole)}
             </div>
             <div>
-              <div className="font-bold text-foreground">{session.id} · {session.specialist}</div>
-              <div className="text-sm text-muted-foreground">{session.type} · Patient {session.patient} · {session.date} at {session.time}</div>
+              <div className="font-bold text-foreground">{session.id} · {session.staffName}</div>
+              <div className="text-sm text-muted-foreground">
+                {session.staffRole === "doctor" ? "Doctor" : "Nutritionist"} · Patient {session.patientName} · {session.date} {session.time ? `at ${session.time}` : ""}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs px-3 py-1 rounded-full bg-red-100 text-red-700 font-medium flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block"></span> LIVE
             </span>
-            <span className="text-sm text-muted-foreground font-mono">{callDuration}</span>
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors ml-2">✕</button>
           </div>
         </div>
@@ -120,6 +177,12 @@ function ConsultationRoom({ session, onClose }: { session: typeof UPCOMING[0]; o
                   <div className={`rounded-xl p-3 text-center text-xs ${callActive ? "bg-green-50 text-green-700" : "bg-muted text-muted-foreground"}`}>
                     {callActive ? "🟢 Call in progress" : "⚫ Call ended"}
                   </div>
+                  {session.chiefComplaint && (
+                    <div className="rounded-xl bg-muted p-3 text-xs text-foreground">
+                      <div className="font-semibold text-muted-foreground mb-1">Chief Complaint</div>
+                      {session.chiefComplaint}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -139,13 +202,20 @@ function ConsultationRoom({ session, onClose }: { session: typeof UPCOMING[0]; o
                       </label>
                     ))}
                   </div>
-                  {selectedTests.length > 0 && (
+                  {testError && <p className="text-xs text-red-600 bg-red-50 rounded-xl p-3">{testError}</p>}
+                  {selectedTests.length > 0 && !testsSent && (
                     <button
-                      className="w-full py-3 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all"
-                      onClick={() => { setTestsSent(true); }}
+                      className="w-full py-3 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-60"
+                      onClick={handleSendTests}
+                      disabled={testsSending}
                     >
-                      {testsSent ? "✓ Sent to Patient" : `Send ${selectedTests.length} Test Request${selectedTests.length > 1 ? "s" : ""}`}
+                      {testsSending ? "Sending…" : `Send ${selectedTests.length} Test Request${selectedTests.length > 1 ? "s" : ""}`}
                     </button>
+                  )}
+                  {testsSent && (
+                    <div className="w-full py-3 rounded-xl bg-green-100 text-green-700 text-sm font-bold text-center">
+                      ✓ Sent to Patient
+                    </div>
                   )}
                 </div>
               )}
@@ -164,19 +234,21 @@ function ConsultationRoom({ session, onClose }: { session: typeof UPCOMING[0]; o
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">Follow-Up Date</label>
+                    <label className="text-xs text-muted-foreground mb-1 block">Valid Until</label>
                     <input
+                      type="date"
                       value={followUp}
                       onChange={(e) => setFollowUp(e.target.value)}
-                      placeholder="e.g. In 6 weeks"
                       className="w-full rounded-xl border border-border bg-muted p-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                     />
                   </div>
+                  {rxError && <p className="text-xs text-red-600 bg-red-50 rounded-xl p-3">{rxError}</p>}
                   <button
-                    className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all"
+                    className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-60"
                     onClick={handleSaveRx}
+                    disabled={rxSaving || !diagnosis}
                   >
-                    {rxSaved ? "✓ Prescription Saved" : "Save & Send Prescription"}
+                    {rxSaved ? "✓ Prescription Saved" : rxSaving ? "Saving…" : "Save & Send Prescription"}
                   </button>
                 </div>
               )}
@@ -187,12 +259,12 @@ function ConsultationRoom({ session, onClose }: { session: typeof UPCOMING[0]; o
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
                 <div className="w-24 h-24 rounded-full bg-primary/20 border-4 border-primary/40 flex items-center justify-center mx-auto mb-4 text-4xl">
-                  {specialist?.emoji}
+                  {roleEmoji(session.staffRole)}
                 </div>
-                <div className="text-white font-semibold text-lg">{session.specialist}</div>
-                <div className="text-zinc-400 text-sm">{session.type}</div>
+                <div className="text-white font-semibold text-lg">{session.staffName}</div>
+                <div className="text-zinc-400 text-sm">{session.staffRole === "doctor" ? "Doctor" : "Nutritionist"}</div>
                 <div className="mt-4 flex justify-center gap-2">
-                  {[1,2,3,4].map((i) => (
+                  {[1, 2, 3, 4].map((i) => (
                     <div key={i} style={{ height: `${8 + i * 4}px` }} className="w-1.5 bg-green-400/60 rounded-full animate-pulse" />
                   ))}
                 </div>
@@ -202,7 +274,7 @@ function ConsultationRoom({ session, onClose }: { session: typeof UPCOMING[0]; o
             <div className="absolute top-4 right-4 w-28 h-36 rounded-2xl bg-zinc-700 border-2 border-primary/40 flex items-center justify-center">
               <div className="text-center">
                 <div className="w-12 h-12 rounded-full bg-primary/30 flex items-center justify-center mx-auto mb-2 text-xl">👤</div>
-                <div className="text-white text-xs font-medium">Patient {session.patient}</div>
+                <div className="text-white text-xs font-medium">{session.patientName}</div>
               </div>
             </div>
 
@@ -272,10 +344,11 @@ function ConsultationRoom({ session, onClose }: { session: typeof UPCOMING[0]; o
               </div>
 
               <button
-                className="w-full py-3 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all"
+                className="w-full py-3 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-60"
                 onClick={handleSaveRx}
+                disabled={rxSaving || !diagnosis}
               >
-                {rxSaved ? "✓ Prescription Saved & Sent" : "💊 Finalise & Send Prescription"}
+                {rxSaved ? "✓ Prescription Saved & Sent" : rxSaving ? "Saving…" : "💊 Finalise & Send Prescription"}
               </button>
             </div>
           </div>
@@ -286,15 +359,43 @@ function ConsultationRoom({ session, onClose }: { session: typeof UPCOMING[0]; o
 }
 
 export default function Wellness() {
-  const totalRevenue = CONSULTANTS.reduce((s, c) => s + c.revenue, 0);
-  const totalSessions = CONSULTANTS.reduce((s, c) => s + c.sessions, 0);
-  const avgRating = (CONSULTANTS.reduce((s, c) => s + c.rating, 0) / CONSULTANTS.length).toFixed(1);
-  const [activeSession, setActiveSession] = useState<typeof UPCOMING[0] | null>(null);
+  const apiFetch = useAdminFetch();
+  const [staff, setStaff] = useState<ClinicalStaff[]>([]);
+  const [consultations, setConsultations] = useState<ConsultationSession[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeSession, setActiveSession] = useState<ConsultationSession | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "sessions">("overview");
+
+  useEffect(() => {
+    Promise.all([
+      apiFetch("/api/admin/clinical-staff").then((r) => r.json()),
+      apiFetch("/api/admin/consultations").then((r) => r.json()),
+    ])
+      .then(([s, c]) => {
+        setStaff(s.staff ?? []);
+        setConsultations(c.consultations ?? []);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const totalSessions = staff.reduce((s, c) => s + c.sessions, 0);
+  const totalPatients = staff.reduce((s, c) => s + c.patients, 0);
+  const doctors = staff.filter((s) => s.role === "doctor");
+  const nutritionists = staff.filter((s) => s.role === "nutritionist");
+
+  const today = new Date().toISOString().slice(0, 10);
+  const todayConsults = consultations.filter((c) => c.date === today);
+  const upcomingConsults = consultations.filter((c) => c.date > today);
 
   return (
     <div className="p-8 space-y-8 overflow-y-auto h-full">
-      {activeSession && <ConsultationRoom session={activeSession} onClose={() => setActiveSession(null)} />}
+      {activeSession && (
+        <ConsultationRoom
+          session={activeSession}
+          onClose={() => setActiveSession(null)}
+          apiFetch={apiFetch}
+        />
+      )}
 
       <div className="flex items-start justify-between">
         <div>
@@ -314,105 +415,163 @@ export default function Wellness() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: "Total Sessions", value: totalSessions, icon: "🩺", color: "text-primary" },
-          { label: "Total Revenue", value: `₦${(totalRevenue / 1_000_000).toFixed(1)}M`, icon: "💰", color: "text-green-700" },
-          { label: "Avg Rating", value: avgRating, icon: "⭐", color: "text-amber-600" },
-        ].map((s) => (
-          <div key={s.label} className="bg-card rounded-2xl p-5 border border-border shadow-xs">
-            <div className="text-2xl mb-2">{s.icon}</div>
-            <div className={`text-3xl font-bold ${s.color}`}>{s.value}</div>
-            <div className="text-sm text-muted-foreground mt-1">{s.label}</div>
-          </div>
-        ))}
-      </div>
+      {loading ? (
+        <div className="grid grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-card rounded-2xl p-5 border border-border shadow-xs animate-pulse h-24" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { label: "Total Sessions", value: totalSessions, icon: "🩺", color: "text-primary" },
+            { label: "Total Patients", value: totalPatients, icon: "👥", color: "text-blue-600" },
+            { label: "Clinical Staff", value: staff.length, icon: "⭐", color: "text-amber-600" },
+          ].map((s) => (
+            <div key={s.label} className="bg-card rounded-2xl p-5 border border-border shadow-xs">
+              <div className="text-2xl mb-2">{s.icon}</div>
+              <div className={`text-3xl font-bold ${s.color}`}>{s.value}</div>
+              <div className="text-sm text-muted-foreground mt-1">{s.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {activeTab === "overview" && (
+      {!loading && activeTab === "overview" && (
         <>
-          <div className="bg-card rounded-2xl border border-border shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-border">
-              <h2 className="text-lg font-bold text-foreground">Specialist Team</h2>
+          {staff.length > 0 ? (
+            <div className="bg-card rounded-2xl border border-border shadow-xs overflow-hidden">
+              <div className="p-5 border-b border-border">
+                <h2 className="text-lg font-bold text-foreground">Clinical Team</h2>
+              </div>
+              {doctors.length > 0 && (
+                <>
+                  <div className="px-5 py-2 bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Doctors</div>
+                  <div className="divide-y divide-border">
+                    {doctors.map((c) => (
+                      <div key={c.id} className="p-5 flex items-center gap-4 hover:bg-muted/30 transition-all">
+                        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">🩺</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-foreground">{c.name}</div>
+                          <div className="text-sm text-muted-foreground">{c.title ?? "Doctor"} · {c.specialization ?? "General"}</div>
+                        </div>
+                        <div className="text-right space-y-0.5">
+                          <div className="text-sm font-medium text-foreground">{c.sessions} sessions</div>
+                          <div className="text-xs text-muted-foreground">{c.patients} patients</div>
+                        </div>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Active</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {nutritionists.length > 0 && (
+                <>
+                  <div className="px-5 py-2 bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nutritionists</div>
+                  <div className="divide-y divide-border">
+                    {nutritionists.map((c) => (
+                      <div key={c.id} className="p-5 flex items-center gap-4 hover:bg-muted/30 transition-all">
+                        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">🥗</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-foreground">{c.name}</div>
+                          <div className="text-sm text-muted-foreground">{c.title ?? "Nutritionist"} · {c.specialization ?? "General Nutrition"}</div>
+                        </div>
+                        <div className="text-right space-y-0.5">
+                          <div className="text-sm font-medium text-foreground">{c.sessions} sessions</div>
+                          <div className="text-xs text-muted-foreground">{c.patients} patients</div>
+                        </div>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Active</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
-            <div className="divide-y divide-border">
-              {CONSULTANTS.map((c) => (
-                <div key={c.name} className="p-5 flex items-center gap-4 hover:bg-muted/30 transition-all">
-                  <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">{c.emoji}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-foreground">{c.name}</div>
-                    <div className="text-sm text-muted-foreground">{c.type} · {c.condition}</div>
-                  </div>
-                  <div className="text-right space-y-0.5">
-                    <div className="text-sm font-medium text-foreground">{c.sessions} sessions</div>
-                    <div className="text-xs text-muted-foreground">⭐ {c.rating}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-primary text-sm">₦{(c.revenue / 1_000_000).toFixed(1)}M</div>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Active</span>
-                  </div>
-                </div>
-              ))}
+          ) : (
+            <div className="bg-card rounded-2xl border border-border p-12 text-center text-muted-foreground">
+              <div className="text-4xl mb-3">🩺</div>
+              <div className="font-semibold">No clinical staff found</div>
+              <div className="text-sm mt-1">Run the Supabase seed script to populate clinical staff data.</div>
             </div>
-          </div>
+          )}
 
           <div className="bg-card rounded-2xl border border-border shadow-xs overflow-hidden">
             <div className="p-5 border-b border-border flex items-center justify-between">
-              <h2 className="text-lg font-bold text-foreground">Upcoming Sessions</h2>
-              <button onClick={() => setActiveTab("sessions")} className="text-sm text-primary font-semibold hover:underline">
-                Open Doctor's Room →
-              </button>
+              <h2 className="text-lg font-bold text-foreground">
+                Upcoming Sessions
+                {todayConsults.length > 0 && (
+                  <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">
+                    {todayConsults.length} today
+                  </span>
+                )}
+              </h2>
+              {consultations.length > 0 && (
+                <button onClick={() => setActiveTab("sessions")} className="text-sm text-primary font-semibold hover:underline">
+                  Open Doctor's Room →
+                </button>
+              )}
             </div>
-            <div className="divide-y divide-border">
-              {UPCOMING.map((s) => (
-                <div key={s.id} className="p-5 flex items-center gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-mono text-xs text-muted-foreground">{s.id}</span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">{s.date}</span>
+            {consultations.length > 0 ? (
+              <div className="divide-y divide-border">
+                {consultations.slice(0, 5).map((s) => (
+                  <div key={s.id} className="p-5 flex items-center gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-mono text-xs text-muted-foreground">{s.id}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full border ${s.date === today ? "bg-green-50 text-green-700 border-green-200" : "bg-blue-50 text-blue-700 border-blue-100"}`}>
+                          {s.date === today ? "Today" : s.date}
+                        </span>
+                      </div>
+                      <div className="font-medium text-foreground text-sm">{s.staffName} · {s.time ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{s.staffRole === "doctor" ? "Doctor" : "Nutritionist"} · Patient {s.patientName}</div>
                     </div>
-                    <div className="font-medium text-foreground text-sm">{s.specialist} · {s.time}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{s.type} · Patient {s.patient}</div>
+                    <button
+                      onClick={() => { setActiveSession(s); setActiveTab("sessions"); }}
+                      className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-1"
+                    >
+                      📹 Open Room
+                    </button>
                   </div>
-                  <div className="font-bold text-primary">₦{s.price.toLocaleString()}</div>
-                  <button
-                    onClick={() => { setActiveSession(s); setActiveTab("sessions"); }}
-                    className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-1"
-                  >
-                    📹 Open Room
-                  </button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-muted-foreground text-sm">
+                No upcoming sessions scheduled. Sessions booked via the mobile app will appear here.
+              </div>
+            )}
           </div>
         </>
       )}
 
-      {activeTab === "sessions" && (
+      {!loading && activeTab === "sessions" && (
         <div className="bg-card rounded-2xl border border-border shadow-xs overflow-hidden">
           <div className="p-5 border-b border-border">
             <h2 className="text-lg font-bold text-foreground">Doctor's Consultation Rooms</h2>
-            <p className="text-sm text-muted-foreground mt-1">Click "Open Room" to enter a live consultation — manage calls, request tests, write prescriptions</p>
+            <p className="text-sm text-muted-foreground mt-1">Click "Open Room" to monitor a live consultation — manage calls, request tests, write prescriptions</p>
           </div>
-          <div className="divide-y divide-border">
-            {UPCOMING.map((s) => {
-              const specialist = CONSULTANTS.find((c) => c.id === s.specialistId);
-              return (
+          {consultations.length > 0 ? (
+            <div className="divide-y divide-border">
+              {consultations.map((s) => (
                 <div key={s.id} className="p-5 flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl">{specialist?.emoji}</div>
+                  <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl">
+                    {roleEmoji(s.staffRole)}
+                  </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-bold text-foreground">{s.id}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${s.date === "Today" ? "bg-green-50 text-green-700 border border-green-200" : "bg-muted text-muted-foreground"}`}>
-                        {s.date}
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${s.date === today ? "bg-green-50 text-green-700 border border-green-200" : "bg-muted text-muted-foreground"}`}>
+                        {s.date === today ? "Today" : s.date}
                       </span>
                     </div>
-                    <div className="text-sm text-foreground font-medium">{s.specialist} with Patient {s.patient}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{s.type} · {s.time}</div>
+                    <div className="text-sm text-foreground font-medium">{s.staffName} with {s.patientName}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{s.staffRole === "doctor" ? "Doctor" : "Nutritionist"} · {s.time ?? "—"}</div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    <div className="font-bold text-primary">₦{s.price.toLocaleString()}</div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${s.date === "Today" ? "bg-red-50 text-red-600" : "bg-muted text-muted-foreground"}`}>
-                      {s.date === "Today" ? "LIVE" : "Scheduled"}
+                    <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
+                      s.status === "in-progress" ? "bg-red-50 text-red-600 font-semibold" :
+                      s.status === "scheduled" ? "bg-blue-50 text-blue-700" : "bg-muted text-muted-foreground"
+                    }`}>
+                      {s.status === "in-progress" ? "LIVE" : s.status}
                     </span>
                   </div>
                   <button
@@ -422,9 +581,15 @@ export default function Wellness() {
                     📹 Open Room
                   </button>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-12 text-center text-muted-foreground">
+              <div className="text-4xl mb-3">📹</div>
+              <div className="font-semibold">No consultations scheduled</div>
+              <div className="text-sm mt-1">When patients book consultations via the mobile app, they will appear here.</div>
+            </div>
+          )}
         </div>
       )}
     </div>

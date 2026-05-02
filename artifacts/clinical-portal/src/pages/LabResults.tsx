@@ -23,7 +23,7 @@ export default function LabResults() {
 
   const { data: results, isLoading } = useQuery<any[]>({
     queryKey: ["lab-results"],
-    queryFn: () => fetchWithAuth("/api/clinical-staff/lab-results"),
+    queryFn: () => fetchWithAuth("/api/clinical-staff/lab-results").then((d) => d.labResults ?? []),
   });
 
   const filtered = (results ?? []).filter((r) => filter === "all" || r.status === filter);

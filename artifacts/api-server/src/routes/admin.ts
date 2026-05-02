@@ -129,6 +129,121 @@ router.get("/meals", authMiddleware, (_req, res) => {
   return res.json(MENU_ITEMS);
 });
 
+router.get("/clinical-staff", authMiddleware, async (_req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const [{ data: staff }, { data: consults }, { data: patients }] = await Promise.all([
+      supabase.from("clinical_staff").select("*"),
+      supabase.from("consultations").select("doctor_id, nutritionist_id"),
+      supabase.from("patients").select("assigned_doctor_id, assigned_nutritionist_id"),
+    ]);
+    const consultMap: Record<string, number> = {};
+    for (const c of consults ?? []) {
+      if (c.doctor_id) consultMap[c.doctor_id] = (consultMap[c.doctor_id] ?? 0) + 1;
+      if (c.nutritionist_id) consultMap[c.nutritionist_id] = (consultMap[c.nutritionist_id] ?? 0) + 1;
+    }
+    const patMap: Record<string, number> = {};
+    for (const p of patients ?? []) {
+      if (p.assigned_doctor_id) patMap[p.assigned_doctor_id] = (patMap[p.assigned_doctor_id] ?? 0) + 1;
+      if (p.assigned_nutritionist_id) patMap[p.assigned_nutritionist_id] = (patMap[p.assigned_nutritionist_id] ?? 0) + 1;
+    }
+    return res.json({
+      staff: (staff ?? []).map((s: any) => ({
+        id: s.id, name: s.name, title: s.title, role: s.role,
+        specialization: s.specialization, email: s.email, badge: s.badge,
+        sessions: consultMap[s.id] ?? 0,
+        patients: patMap[s.id] ?? 0,
+      })),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/consultations", authMiddleware, async (_req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: consults, error } = await supabase
+      .from("consultations")
+      .select("*, patients(id, name)")
+      .gte("date", today)
+      .order("date", { ascending: true })
+      .limit(20);
+    if (error) throw error;
+    const staffIds = [...new Set((consults ?? []).flatMap((c: any) => [c.doctor_id, c.nutritionist_id].filter(Boolean)))];
+    const { data: staffData } = staffIds.length
+      ? await supabase.from("clinical_staff").select("id, name, role").in("id", staffIds)
+      : { data: [] };
+    const staffMap = new Map((staffData ?? []).map((s: any) => [s.id, s]));
+    return res.json({
+      consultations: (consults ?? []).map((c: any) => ({
+        id: c.id,
+        patientId: c.patient_id,
+        patientName: c.patients?.name ?? "Unknown",
+        doctorId: c.doctor_id ?? null,
+        nutritionistId: c.nutritionist_id ?? null,
+        staffId: c.doctor_id ?? c.nutritionist_id ?? null,
+        staffName: (staffMap.get(c.doctor_id) ?? staffMap.get(c.nutritionist_id))?.name ?? "Unknown",
+        staffRole: c.doctor_id ? "doctor" : "nutritionist",
+        date: c.date,
+        time: c.scheduled_time,
+        duration: c.duration,
+        status: c.status,
+        type: c.type,
+        chiefComplaint: c.chief_complaint,
+      })),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/test-requests", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const { patientId, tests } = req.body as { patientId: string; tests: string[] };
+    const date = new Date().toISOString().slice(0, 10);
+    const inserts = tests.map((testName: string, i: number) => ({
+      id: `tr-${Date.now()}-${i}`,
+      patient_id: patientId,
+      test_name: testName,
+      status: "pending",
+      date,
+    }));
+    const { error } = await supabase.from("lab_results").insert(inserts);
+    if (error) throw error;
+    return res.status(201).json({ success: true, count: inserts.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/prescriptions", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const id = `rx-${Date.now()}`;
+    const date = new Date().toISOString().slice(0, 10);
+    const { data, error } = await supabase
+      .from("prescriptions")
+      .insert({
+        id, date,
+        patient_id: req.body.patientId,
+        doctor_id: req.body.doctorId ?? null,
+        diagnosis: req.body.diagnosis,
+        medications: req.body.medications ?? [],
+        notes: req.body.notes ?? null,
+        valid_until: req.body.validUntil ?? null,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return res.status(201).json({ id: data.id });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get("/analytics", authMiddleware, async (_req, res) => {
   if (!supabase) return res.status(503).json({ error: "Database not configured" });
   try {

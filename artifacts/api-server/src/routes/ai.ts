@@ -22,7 +22,8 @@ router.post("/chat", async (req, res) => {
   const { messages, healthContext } = req.body;
 
   if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: "messages array required" });
+    res.status(400).json({ error: "messages array required" });
+    return;
   }
 
   res.setHeader("Content-Type", "text/event-stream");

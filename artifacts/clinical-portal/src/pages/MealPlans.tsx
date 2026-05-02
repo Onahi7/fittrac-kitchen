@@ -29,7 +29,7 @@ function AdherenceRing({ score }: { score: number }) {
 export default function MealPlans() {
   const { data: plans, isLoading } = useQuery<any[]>({
     queryKey: ["meal-plans"],
-    queryFn: () => fetchWithAuth("/api/clinical-staff/meal-plans"),
+    queryFn: () => fetchWithAuth("/api/clinical-staff/meal-plans").then((d) => d.mealPlans ?? []),
   });
 
   const active = (plans ?? []).filter(p => p.status === "active");

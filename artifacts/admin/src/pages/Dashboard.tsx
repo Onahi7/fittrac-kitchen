@@ -13,6 +13,12 @@ interface Stats {
   avgOrderValue: number;
 }
 
+interface Analytics {
+  weeklyOrders: number[];
+  weeklyRevenue: number[];
+  totalOrders: number;
+}
+
 const STATUS_COLORS: Record<string, string> = {
   confirmed: "bg-blue-100 text-blue-700",
   preparing: "bg-amber-100 text-amber-700",
@@ -30,12 +36,15 @@ const CONDITION_COLORS: Record<string, string> = {
 export default function Dashboard() {
   const apiFetch = useAdminFetch();
   const [stats, setStats] = useState<Stats | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch("/api/admin/stats")
-      .then((r) => r.json())
-      .then((d) => setStats(d))
+    Promise.all([
+      apiFetch("/api/admin/stats").then((r) => r.json()),
+      apiFetch("/api/admin/analytics").then((r) => r.json()),
+    ])
+      .then(([s, a]) => { setStats(s); setAnalytics(a); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -47,9 +56,14 @@ export default function Dashboard() {
     );
   }
 
+  const yesterdayOrders = analytics?.weeklyOrders?.[5] ?? 0;
+  const yesterdayRevenue = analytics?.weeklyRevenue?.[5] ?? 0;
+  const todayRevenue = analytics?.weeklyRevenue?.[6] ?? 0;
+  const revPct = yesterdayRevenue > 0 ? Math.round(((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100) : 0;
+
   const statCards = [
-    { label: "Today's Orders", value: stats?.todayOrders ?? 0, icon: "📦", sub: "vs 5 yesterday", color: "text-blue-600", bg: "bg-blue-50" },
-    { label: "Today's Revenue", value: `₦${((stats?.todayRevenue ?? 0) / 1000).toFixed(1)}k`, icon: "💰", sub: "+12% from yesterday", color: "text-green-700", bg: "bg-green-50" },
+    { label: "Today's Orders", value: stats?.todayOrders ?? 0, icon: "📦", sub: `vs ${yesterdayOrders} yesterday`, color: "text-blue-600", bg: "bg-blue-50" },
+    { label: "Today's Revenue", value: `₦${((stats?.todayRevenue ?? 0) / 1000).toFixed(1)}k`, icon: "💰", sub: revPct !== 0 ? `${revPct > 0 ? "+" : ""}${revPct}% from yesterday` : "Same as yesterday", color: "text-green-700", bg: "bg-green-50" },
     { label: "Total Orders", value: stats?.totalOrders ?? 0, icon: "🗂️", sub: "All time", color: "text-primary", bg: "bg-primary/10" },
     { label: "Avg Order Value", value: `₦${((stats?.avgOrderValue ?? 0) / 1000).toFixed(1)}k`, icon: "📊", sub: "Per transaction", color: "text-secondary", bg: "bg-secondary/10" },
   ];
@@ -120,25 +134,32 @@ export default function Dashboard() {
         <div className="xl:col-span-2 bg-card rounded-2xl p-6 border border-border shadow-xs">
           <h2 className="text-lg font-bold text-foreground mb-4">Weekly Order Volume</h2>
           <div className="flex items-end gap-2 h-32">
-            {[12, 18, 15, 22, 19, 25, 17].map((v, i) => {
-              const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-              const maxV = 25;
-              const isToday = i === 4;
-              return (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
-                  <div className="flex-1 w-full flex items-end">
-                    <div
-                      className="w-full rounded-t-lg transition-all"
-                      style={{
-                        height: `${(v / maxV) * 100}%`,
-                        backgroundColor: isToday ? "#154212" : "#A5C9A1",
-                      }}
-                    />
+            {(() => {
+              const weeklyData = analytics?.weeklyOrders ?? [0, 0, 0, 0, 0, 0, 0];
+              const maxV = Math.max(...weeklyData, 1);
+              const days = Array.from({ length: 7 }, (_, i) => {
+                const d = new Date();
+                d.setDate(d.getDate() - (6 - i));
+                return d.toLocaleDateString("en-NG", { weekday: "short" });
+              });
+              return weeklyData.map((v, i) => {
+                const isToday = i === 6;
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
+                    <div className="flex-1 w-full flex items-end">
+                      <div
+                        className="w-full rounded-t-lg transition-all"
+                        style={{
+                          height: `${(v / maxV) * 100}%`,
+                          backgroundColor: isToday ? "#154212" : "#A5C9A1",
+                        }}
+                      />
+                    </div>
+                    <span className={`text-xs ${isToday ? "text-primary font-bold" : "text-muted-foreground"}`}>{days[i]}</span>
                   </div>
-                  <span className={`text-xs ${isToday ? "text-primary font-bold" : "text-muted-foreground"}`}>{days[i]}</span>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
         </div>
 

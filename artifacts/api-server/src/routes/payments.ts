@@ -43,7 +43,7 @@ router.post("/paystack/initialize", async (req, res) => {
       },
       body: JSON.stringify({ amount: amountInKobo, email, reference, metadata }),
     });
-    const data = await response.json();
+    const data = await response.json() as any;
     if (data.status) {
       TRANSACTIONS[reference] = { reference, amount, email, orderId, status: "initialized", metadata };
     }
@@ -67,7 +67,7 @@ router.get("/paystack/verify/:reference", async (req, res) => {
     const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
       headers: { Authorization: `Bearer ${PAYSTACK_SECRET}` },
     });
-    const data = await response.json();
+    const data = await response.json() as any;
     if (data.data?.status === "success" && TRANSACTIONS[reference]) {
       TRANSACTIONS[reference].status = "success";
     }

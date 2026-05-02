@@ -10,7 +10,7 @@ interface Meal {
   conditions: string[];
   glycemicIndex: string;
   sodiumLevel: string;
-  orders: number;
+  orders?: number;
 }
 
 const MEAL_TYPE_STYLE: Record<string, string> = {
@@ -56,7 +56,7 @@ export default function Menu() {
   });
 
   const topMeal = meals[0];
-  const totalOrders = meals.reduce((s, m) => s + m.orders, 0);
+  const totalOrders = meals.reduce((s, m) => s + (m.orders ?? 0), 0);
 
   return (
     <div className="p-8 space-y-6 overflow-y-auto h-full">
@@ -109,7 +109,7 @@ export default function Menu() {
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium border capitalize ${MEAL_TYPE_STYLE[meal.mealType] ?? "bg-muted text-muted-foreground border-border"}`}>
                       {meal.mealType}
                     </span>
-                    {meal.orders > 70 && (
+                    {(meal.orders ?? 0) > 70 && (
                       <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
                         🔥 Trending
                       </span>
@@ -134,14 +134,14 @@ export default function Menu() {
                 </div>
                 <div className="ml-auto">
                   <span className="text-muted-foreground">Orders: </span>
-                  <span className="font-bold text-foreground">{meal.orders}</span>
+                  <span className="font-bold text-foreground">{meal.orders ?? 0}</span>
                 </div>
               </div>
 
               <div className="h-1.5 rounded-full bg-muted overflow-hidden mb-3">
                 <div
                   className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${Math.min((meal.orders / 100) * 100, 100)}%` }}
+                  style={{ width: `${Math.min(((meal.orders ?? 0) / 100) * 100, 100)}%` }}
                 />
               </div>
 

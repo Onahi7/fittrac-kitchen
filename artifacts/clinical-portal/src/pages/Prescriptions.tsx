@@ -11,7 +11,7 @@ export default function Prescriptions() {
 
   const { data: prescriptions, isLoading } = useQuery<any[]>({
     queryKey: ["prescriptions"],
-    queryFn: () => fetchWithAuth("/api/clinical-staff/prescriptions"),
+    queryFn: () => fetchWithAuth("/api/clinical-staff/prescriptions").then((d) => d.prescriptions ?? []),
   });
 
   if (isLoading) {

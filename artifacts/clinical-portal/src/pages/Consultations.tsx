@@ -32,7 +32,7 @@ export default function Consultations() {
 
   const { data: consultations, isLoading } = useQuery<any[]>({
     queryKey: ["consultations"],
-    queryFn: () => fetchWithAuth("/api/clinical-staff/consultations"),
+    queryFn: () => fetchWithAuth("/api/clinical-staff/consultations").then((d) => d.consultations ?? []),
   });
 
   const today = new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
