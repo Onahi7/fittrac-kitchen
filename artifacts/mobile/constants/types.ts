@@ -53,3 +53,30 @@ export interface UserProfile {
   conditions: Condition[];
   dietaryRestrictions: string[];
 }
+
+export interface WeightLog {
+  date: string;
+  weight: number;
+}
+
+export interface NutritionLog {
+  date: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  source: "order" | "manual";
+  label?: string;
+}
+
+export interface Consultation {
+  id: string;
+  specialistType: string;
+  specialistName: string;
+  date: string;
+  time: string;
+  status: "upcoming" | "completed" | "cancelled";
+  price: number;
+  notes?: string;
+}

@@ -56,6 +56,7 @@ function RootLayoutNav() {
           name="order-success"
           options={{ presentation: "fullScreenModal" }}
         />
+        <Stack.Screen name="wellness" options={{ presentation: "card" }} />
       </Stack>
     </>
   );

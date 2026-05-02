@@ -21,6 +21,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "fork.knife", selected: "fork.knife" }} />
         <Label>Menu</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="health">
+        <Icon sf={{ default: "heart", selected: "heart.fill" }} />
+        <Label>Health</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="orders">
         <Icon sf={{ default: "bag", selected: "bag.fill" }} />
         <Label>Orders</Label>
@@ -74,7 +78,7 @@ function ClassicTabLayout() {
           ) : null,
         tabBarLabelStyle: {
           fontFamily: "Manrope_500Medium",
-          fontSize: 11,
+          fontSize: 10,
         },
       }}
     >
@@ -101,6 +105,18 @@ function ClassicTabLayout() {
               <Feather name="grid" size={22} color={color} />
             ),
           tabBarBadge: basketCount > 0 ? basketCount : undefined,
+        }}
+      />
+      <Tabs.Screen
+        name="health"
+        options={{
+          title: "Health",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="heart" tintColor={color} size={22} />
+            ) : (
+              <Feather name="heart" size={22} color={color} />
+            ),
         }}
       />
       <Tabs.Screen
