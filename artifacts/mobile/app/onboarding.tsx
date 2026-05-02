@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
+
 import {
   Platform,
   Pressable,
@@ -219,6 +220,19 @@ export default function OnboardingScreen() {
         <Text style={[styles.termsText, { color: colors.mutedForeground, fontFamily: "Manrope_400Regular" }]}>
           By proceeding, you agree to our Privacy Charter
         </Text>
+        <Pressable
+          style={styles.providerLink}
+          onPress={() => {
+            if (Platform.OS !== "web") Haptics.selectionAsync();
+            router.push("/clinical-login");
+          }}
+        >
+          <Feather name="shield" size={13} color={colors.primary} />
+          <Text style={[styles.providerLinkText, { color: colors.primary, fontFamily: "Manrope_600SemiBold" }]}>
+            Are you a provider? Sign in here
+          </Text>
+          <Feather name="arrow-right" size={13} color={colors.primary} />
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -301,4 +315,6 @@ const styles = StyleSheet.create({
   },
   ctaBtnText: { color: "#fff", fontSize: 17 },
   termsText: { fontSize: 12, textAlign: "center" },
+  providerLink: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 4 },
+  providerLinkText: { fontSize: 13 },
 });

@@ -20,25 +20,39 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider, useApp } from "@/context/AppContext";
+import { ClinicalAuthProvider, useClinicalAuth } from "@/context/ClinicalAuthContext";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
 function NavigationGuard() {
-  const { isOnboarded, isLoading } = useApp();
+  const { isOnboarded, isLoading: appLoading } = useApp();
+  const { clinicalStaff, isLoading: clinicalLoading } = useClinicalAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoading) return;
+    if (appLoading || clinicalLoading) return;
+
+    const inClinicalTabs = segments[0] === "(clinical-tabs)";
+    const inClinicalLogin = segments[0] === "clinical-login";
     const inOnboarding = segments[0] === "onboarding";
-    if (!isOnboarded && !inOnboarding) {
-      router.replace("/onboarding");
-    } else if (isOnboarded && inOnboarding) {
-      router.replace("/(tabs)");
+
+    if (clinicalStaff) {
+      if (!inClinicalTabs) {
+        router.replace("/(clinical-tabs)/cl-schedule");
+      }
+    } else if (!isOnboarded) {
+      if (!inOnboarding && !inClinicalLogin) {
+        router.replace("/onboarding");
+      }
+    } else {
+      if (inOnboarding || inClinicalTabs) {
+        router.replace("/(tabs)");
+      }
     }
-  }, [isOnboarded, isLoading, segments]);
+  }, [isOnboarded, appLoading, clinicalStaff, clinicalLoading, segments]);
 
   return null;
 }
@@ -50,6 +64,8 @@ function RootLayoutNav() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="(clinical-tabs)" />
+        <Stack.Screen name="clinical-login" options={{ presentation: "card" }} />
         <Stack.Screen name="meal/[id]" options={{ presentation: "card" }} />
         <Stack.Screen name="checkout" options={{ presentation: "card" }} />
         <Stack.Screen name="order-success" options={{ presentation: "fullScreenModal" }} />
@@ -89,13 +105,15 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <AppProvider>
-          <QueryClientProvider client={queryClient}>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <KeyboardProvider>
-                <RootLayoutNav />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </QueryClientProvider>
+          <ClinicalAuthProvider>
+            <QueryClientProvider client={queryClient}>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <KeyboardProvider>
+                  <RootLayoutNav />
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </QueryClientProvider>
+          </ClinicalAuthProvider>
         </AppProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
