@@ -392,7 +392,7 @@ export default function CheckoutScreen() {
           </View>
           {basket.map((item) => (
             <View key={`${item.meal.id}-${item.mealType}`} style={[styles.basketItem, { backgroundColor: colors.card }]}>
-              <Image source={item.meal.image} style={styles.basketImage} resizeMode="cover" />
+              <Image source={item.meal.image as any} style={styles.basketImage} resizeMode="cover" />
               <View style={styles.basketInfo}>
                 <Text style={[styles.basketName, { color: colors.onSurface, fontFamily: "Manrope_600SemiBold" }]}>{item.meal.name}</Text>
                 <Text style={[styles.basketType, { color: colors.mutedForeground, fontFamily: "Manrope_400Regular" }]}>

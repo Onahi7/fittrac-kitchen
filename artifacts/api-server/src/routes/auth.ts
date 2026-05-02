@@ -225,6 +225,48 @@ router.post("/book-consultation", authMiddleware, async (req: any, res) => {
   }
 });
 
+router.post("/google", async (req, res) => {
+  const { access_token } = req.body ?? {};
+  if (!access_token) return res.status(400).json({ error: "access_token required" });
+  try {
+    if (!supabase) return res.status(503).json({ error: "Auth service unavailable" });
+    const { data: { user: supaUser }, error: verifyErr } = await supabase.auth.getUser(access_token);
+    if (verifyErr || !supaUser) return res.status(401).json({ error: "Invalid token" });
+
+    const email = supaUser.email!;
+    const name = (supaUser.user_metadata?.full_name as string | undefined)
+      ?? (supaUser.user_metadata?.name as string | undefined)
+      ?? email.split("@")[0];
+    const googleId = supaUser.id;
+
+    let { data: existingUser } = await supabase
+      .from("users")
+      .select("id,name,email,phone,conditions,patient_id")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (!existingUser) {
+      const userId = `usr-g-${Date.now()}`;
+      const { data: newUser, error: createErr } = await supabase
+        .from("users")
+        .insert({ id: userId, name, email, google_id: googleId, conditions: [], created_at: new Date().toISOString() })
+        .select("id,name,email,phone,conditions,patient_id")
+        .single();
+      if (createErr) throw createErr;
+      existingUser = newUser;
+    } else {
+      await supabase.from("users").update({ google_id: googleId }).eq("id", existingUser.id);
+    }
+
+    const token = generateToken();
+    activeSessions.set(token, { userId: existingUser.id, email: existingUser.email, name: existingUser.name });
+    return res.json({ token, user: existingUser });
+  } catch (err: any) {
+    req.log?.error(err, "google auth error");
+    return res.status(500).json({ error: "Google auth failed" });
+  }
+});
+
 router.post("/orders", authMiddleware, async (req: any, res) => {
   const { items, fulfillment, address, total, paymentMethod, deliveryDate } = req.body;
   try {

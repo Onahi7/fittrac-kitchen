@@ -13,10 +13,11 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider, useApp } from "@/context/AppContext";
@@ -33,25 +34,39 @@ function NavigationGuard() {
   const { clinicalStaff, isLoading: clinicalLoading } = useClinicalAuth();
   const segments = useSegments();
   const router = useRouter();
+  const [hasSeenIntro, setHasSeenIntro] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (authLoading || appLoading || clinicalLoading) return;
+    AsyncStorage.getItem("fk_intro_seen").then((val) => {
+      setHasSeenIntro(val === "1");
+    });
+  }, []);
+
+  useEffect(() => {
+    if (authLoading || appLoading || clinicalLoading || hasSeenIntro === null) return;
 
     const inClinicalTabs = segments[0] === "(clinical-tabs)";
     const inClinicalLogin = segments[0] === "clinical-login";
     const inLogin = segments[0] === "login";
     const inRegister = segments[0] === "register";
     const inOnboarding = segments[0] === "onboarding";
-    const inAuthFlow = inLogin || inRegister || inOnboarding || inClinicalLogin;
+    const inIntro = segments[0] === "onboarding-welcome";
+    const inAuthFlow = inLogin || inRegister || inOnboarding || inClinicalLogin || inIntro;
 
     if (clinicalStaff) {
       if (!inClinicalTabs) router.replace("/(clinical-tabs)/cl-schedule");
     } else if (!isAuthenticated) {
-      if (!inAuthFlow) router.replace("/login");
+      if (!inAuthFlow) {
+        if (!hasSeenIntro) {
+          router.replace("/onboarding-welcome");
+        } else {
+          router.replace("/login");
+        }
+      }
     } else {
       if (inAuthFlow || inClinicalTabs) router.replace("/(tabs)");
     }
-  }, [isAuthenticated, authLoading, appLoading, clinicalStaff, clinicalLoading, segments]);
+  }, [isAuthenticated, authLoading, appLoading, clinicalStaff, clinicalLoading, segments, hasSeenIntro]);
 
   return null;
 }
@@ -61,6 +76,7 @@ function RootLayoutNav() {
     <>
       <NavigationGuard />
       <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="onboarding-welcome" />
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
         <Stack.Screen name="onboarding" />

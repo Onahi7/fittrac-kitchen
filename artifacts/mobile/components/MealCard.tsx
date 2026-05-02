@@ -52,7 +52,7 @@ export function MealCard({ meal, showTypeBadge = true }: MealCardProps) {
       }
     >
       <View style={styles.imageContainer}>
-        <Image source={meal.image} style={styles.image} resizeMode="cover" />
+        <Image source={meal.image as any} style={styles.image} resizeMode="cover" />
         {showTypeBadge && (
           <View
             style={[

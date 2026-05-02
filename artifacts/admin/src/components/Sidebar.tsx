@@ -7,6 +7,7 @@ const NAV = [
   { href: "/menu", icon: "🥘", label: "Menu" },
   { href: "/analytics", icon: "📈", label: "Analytics" },
   { href: "/wellness", icon: "🩺", label: "Wellness" },
+  { href: "/settings", icon: "⚙️", label: "Settings" },
 ];
 
 export default function Sidebar() {

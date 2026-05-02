@@ -21,13 +21,26 @@ export default function LoginScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const handleGoogleLogin = async () => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setGoogleLoading(true);
+    setError("");
+    try {
+      await loginWithGoogle();
+    } catch (e: any) {
+      setError(e.message ?? "Google sign-in failed. Please try again.");
+      setGoogleLoading(false);
+    }
+  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
@@ -64,7 +77,7 @@ export default function LoginScreen() {
       >
         <View style={styles.header}>
           <View style={[styles.logoBox, { backgroundColor: colors.primaryContainer }]}>
-            <Feather name="leaf" size={28} color={colors.primary} />
+            <Feather name={"leaf" as any} size={28} color={colors.primary} />
           </View>
           <Text style={[styles.title, { color: colors.primary, fontFamily: "Epilogue_700Bold" }]}>
             Welcome back
@@ -149,6 +162,30 @@ export default function LoginScreen() {
               </Text>
             </Pressable>
           </View>
+
+          <View style={[styles.divider, { borderColor: colors.outlineVariant }]}>
+            <Text style={[styles.dividerText, { color: colors.mutedForeground, backgroundColor: colors.background, fontFamily: "Manrope_400Regular" }]}>
+              or
+            </Text>
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.providerBtn,
+              { borderColor: colors.outlineVariant, opacity: pressed || googleLoading ? 0.7 : 1 },
+            ]}
+            onPress={handleGoogleLogin}
+            disabled={googleLoading || loading}
+          >
+            {googleLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Text style={{ fontSize: 17 }}>G</Text>
+            )}
+            <Text style={[styles.providerText, { color: colors.onSurface, fontFamily: "Manrope_600SemiBold" }]}>
+              Continue with Google
+            </Text>
+          </Pressable>
 
           <View style={[styles.divider, { borderColor: colors.outlineVariant }]}>
             <Text style={[styles.dividerText, { color: colors.mutedForeground, backgroundColor: colors.background, fontFamily: "Manrope_400Regular" }]}>

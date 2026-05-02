@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS users (
   name          TEXT NOT NULL,
   email         TEXT UNIQUE NOT NULL,
   phone         TEXT,
-  password_hash TEXT NOT NULL,
+  password_hash TEXT,
+  google_id     TEXT UNIQUE,
   conditions    TEXT[]  DEFAULT '{}',
   patient_id    TEXT,
   created_at    TIMESTAMPTZ DEFAULT NOW()
@@ -153,6 +154,55 @@ CREATE TABLE IF NOT EXISTS prescriptions (
   created_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ─── NEW: Menu Items (admin-managed) ──────────────────────────────
+CREATE TABLE IF NOT EXISTS menu_items (
+  id              TEXT PRIMARY KEY,
+  name            TEXT NOT NULL,
+  price           INTEGER NOT NULL,
+  calories        INTEGER DEFAULT 0,
+  meal_type       TEXT NOT NULL CHECK (meal_type IN ('breakfast','lunch','dinner','drink','snack')),
+  conditions      TEXT[] DEFAULT '{}',
+  glycemic_index  TEXT DEFAULT 'Low' CHECK (glycemic_index IN ('Low','Medium','High')),
+  sodium_level    TEXT DEFAULT 'Low' CHECK (sodium_level IN ('Low','Medium','High')),
+  description     TEXT,
+  image_url       TEXT,
+  is_available    BOOLEAN DEFAULT true,
+  display_order   INTEGER DEFAULT 0,
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Seed default menu items
+INSERT INTO menu_items (id, name, price, calories, meal_type, conditions, glycemic_index, sodium_level, description) VALUES
+  ('m1', 'Akara Protein Balls', 3200, 340, 'breakfast', ARRAY['weightloss','diabetes'], 'Low', 'Low', 'Crispy bean fritters packed with plant protein and spiced with scent leaf.'),
+  ('m2', 'Egusi Soup + Pounded Yam', 5800, 520, 'lunch', ARRAY['hypertension','liver'], 'Medium', 'Low', 'Rich melon seed soup with ugu leaves, served with silky pounded yam.'),
+  ('m3', 'Tilapia Pepper Soup', 6200, 280, 'lunch', ARRAY['diabetes','liver','hypertension'], 'Low', 'Medium', 'Light medicinal pepper soup with tilapia, uziza, and scent leaf.'),
+  ('m4', 'Moi Moi Health Bowl', 4500, 380, 'dinner', ARRAY['weightloss','hypertension'], 'Low', 'Low', 'Steamed bean pudding enriched with vegetables and crayfish.'),
+  ('m5', 'Jollof Brown Rice', 4800, 420, 'lunch', ARRAY['diabetes','weightloss'], 'Low', 'Low', 'Low-GI brown rice in a rich tomato base, loaded with antioxidants.'),
+  ('m6', 'Ogbono Light Soup', 5200, 310, 'dinner', ARRAY['liver','hypertension'], 'Low', 'Low', 'Drawing soup made with bitter leaf, fluted pumpkin, and lean protein.'),
+  ('m7', 'Zobo Detox Drink', 1800, 45, 'drink', ARRAY['hypertension','liver'], 'Low', 'Low', 'Hibiscus tea blended with ginger and natural fruit to reduce blood pressure.'),
+  ('m8', 'Moringa Power Smoothie', 2200, 120, 'drink', ARRAY['diabetes','weightloss','liver'], 'Low', 'Low', 'Nutrient-dense moringa blended with banana, ginger, and coconut water.'),
+  ('m9', 'Turmeric Ginger Elixir', 2000, 60, 'drink', ARRAY['hypertension','liver','allergies'], 'Low', 'Low', 'Anti-inflammatory golden drink with turmeric, ginger, and black pepper.')
+ON CONFLICT (id) DO NOTHING;
+
+-- ─── NEW: App Settings (key-value store) ─────────────────────────
+CREATE TABLE IF NOT EXISTS app_settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO app_settings (key, value) VALUES
+  ('app_tagline',     'The Earth''s Apothecary'),
+  ('hero_title',      'Nigerian Wellness Cuisine'),
+  ('hero_subtitle',   'Food as Medicine, Culture as Cure'),
+  ('primary_color',   '#154212'),
+  ('secondary_color', '#8b500a'),
+  ('logo_url',        ''),
+  ('banner_url',      ''),
+  ('announcement',    '')
+ON CONFLICT (key) DO NOTHING;
+
 -- Disable Row Level Security (service role bypasses anyway)
 ALTER TABLE clinical_staff  DISABLE ROW LEVEL SECURITY;
 ALTER TABLE users            DISABLE ROW LEVEL SECURITY;
@@ -163,3 +213,5 @@ ALTER TABLE lab_results      DISABLE ROW LEVEL SECURITY;
 ALTER TABLE meal_plans       DISABLE ROW LEVEL SECURITY;
 ALTER TABLE session_notes    DISABLE ROW LEVEL SECURITY;
 ALTER TABLE prescriptions    DISABLE ROW LEVEL SECURITY;
+ALTER TABLE menu_items       DISABLE ROW LEVEL SECURITY;
+ALTER TABLE app_settings     DISABLE ROW LEVEL SECURITY;

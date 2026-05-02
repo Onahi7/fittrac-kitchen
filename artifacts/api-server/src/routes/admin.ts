@@ -22,17 +22,34 @@ function authMiddleware(req: any, res: any, next: any) {
   next();
 }
 
-const MENU_ITEMS = [
-  { id: "m1", name: "Akara Protein Balls", price: 3200, calories: 340, mealType: "breakfast", conditions: ["weightloss", "diabetes"], glycemicIndex: "Low", sodiumLevel: "Low" },
-  { id: "m2", name: "Egusi Soup + Pounded Yam", price: 5800, calories: 520, mealType: "lunch", conditions: ["hypertension", "liver"], glycemicIndex: "Medium", sodiumLevel: "Low" },
-  { id: "m3", name: "Tilapia Pepper Soup", price: 6200, calories: 280, mealType: "lunch", conditions: ["diabetes", "liver", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Medium" },
-  { id: "m4", name: "Moi Moi Health Bowl", price: 4500, calories: 380, mealType: "dinner", conditions: ["weightloss", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Low" },
-  { id: "m5", name: "Jollof Brown Rice", price: 4800, calories: 420, mealType: "lunch", conditions: ["diabetes", "weightloss"], glycemicIndex: "Low", sodiumLevel: "Low" },
-  { id: "m6", name: "Ogbono Light Soup", price: 5200, calories: 310, mealType: "dinner", conditions: ["liver", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Low" },
-  { id: "m7", name: "Zobo Detox Drink", price: 1800, calories: 45, mealType: "drink", conditions: ["hypertension", "liver"], glycemicIndex: "Low", sodiumLevel: "Low" },
-  { id: "m8", name: "Moringa Power Smoothie", price: 2200, calories: 120, mealType: "drink", conditions: ["diabetes", "weightloss", "liver"], glycemicIndex: "Low", sodiumLevel: "Low" },
-  { id: "m9", name: "Turmeric Ginger Elixir", price: 2000, calories: 60, mealType: "drink", conditions: ["hypertension", "liver", "allergies"], glycemicIndex: "Low", sodiumLevel: "Low" },
+const FALLBACK_MENU = [
+  { id: "m1", name: "Akara Protein Balls", price: 3200, calories: 340, mealType: "breakfast", conditions: ["weightloss", "diabetes"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
+  { id: "m2", name: "Egusi Soup + Pounded Yam", price: 5800, calories: 520, mealType: "lunch", conditions: ["hypertension", "liver"], glycemicIndex: "Medium", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
+  { id: "m3", name: "Tilapia Pepper Soup", price: 6200, calories: 280, mealType: "lunch", conditions: ["diabetes", "liver", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Medium", description: "", imageUrl: null, isAvailable: true },
+  { id: "m4", name: "Moi Moi Health Bowl", price: 4500, calories: 380, mealType: "dinner", conditions: ["weightloss", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
+  { id: "m5", name: "Jollof Brown Rice", price: 4800, calories: 420, mealType: "lunch", conditions: ["diabetes", "weightloss"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
+  { id: "m6", name: "Ogbono Light Soup", price: 5200, calories: 310, mealType: "dinner", conditions: ["liver", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
+  { id: "m7", name: "Zobo Detox Drink", price: 1800, calories: 45, mealType: "drink", conditions: ["hypertension", "liver"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
+  { id: "m8", name: "Moringa Power Smoothie", price: 2200, calories: 120, mealType: "drink", conditions: ["diabetes", "weightloss", "liver"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
+  { id: "m9", name: "Turmeric Ginger Elixir", price: 2000, calories: 60, mealType: "drink", conditions: ["hypertension", "liver", "allergies"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
 ];
+
+function mapMealItem(row: any) {
+  return {
+    id: row.id,
+    name: row.name,
+    price: row.price,
+    calories: row.calories ?? 0,
+    mealType: row.meal_type ?? row.mealType,
+    conditions: row.conditions ?? [],
+    glycemicIndex: row.glycemic_index ?? row.glycemicIndex ?? "Low",
+    sodiumLevel: row.sodium_level ?? row.sodiumLevel ?? "Low",
+    description: row.description ?? "",
+    imageUrl: row.image_url ?? row.imageUrl ?? null,
+    isAvailable: row.is_available ?? row.isAvailable ?? true,
+    orders: row.orders ?? 0,
+  };
+}
 
 router.post("/login", (req, res) => {
   const { username, password } = req.body;
@@ -62,15 +79,20 @@ router.get("/stats", authMiddleware, async (_req, res) => {
     const todayRevenue = todayOrders.reduce((s: number, o: any) => s + (o.total ?? 0), 0);
     const statusBreakdown: Record<string, number> = {};
     for (const o of all) statusBreakdown[o.status] = (statusBreakdown[o.status] ?? 0) + 1;
+
+    const { data: menuItems } = await supabase.from("menu_items").select("id, name").eq("is_available", true);
+    const totalMeals = (menuItems ?? FALLBACK_MENU).length;
+    const topMeal = (menuItems ?? FALLBACK_MENU)[0]?.name ?? "Egusi Soup";
+
     return res.json({
       totalOrders: all.length,
       todayOrders: todayOrders.length,
       totalRevenue,
       todayRevenue,
-      totalMeals: MENU_ITEMS.length,
+      totalMeals,
       conditionBreakdown: {},
       statusBreakdown,
-      topMeal: MENU_ITEMS[1].name,
+      topMeal,
       avgOrderValue: all.length > 0 ? Math.round(totalRevenue / all.length) : 0,
     });
   } catch (err: any) {
@@ -125,8 +147,152 @@ router.patch("/orders/:id/status", authMiddleware, async (req, res) => {
   }
 });
 
-router.get("/meals", authMiddleware, (_req, res) => {
-  return res.json(MENU_ITEMS);
+router.get("/meals", authMiddleware, async (_req, res) => {
+  if (!supabase) return res.json(FALLBACK_MENU);
+  try {
+    const { data, error } = await supabase
+      .from("menu_items")
+      .select("*")
+      .order("display_order", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return res.json((data ?? FALLBACK_MENU).map(mapMealItem));
+  } catch {
+    return res.json(FALLBACK_MENU);
+  }
+});
+
+router.post("/menu-items", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const { name, price, calories, mealType, conditions, glycemicIndex, sodiumLevel, description, imageUrl } = req.body;
+    if (!name || !price || !mealType) return res.status(400).json({ error: "name, price, and mealType are required" });
+    const id = `m-${Date.now()}`;
+    const { data, error } = await supabase
+      .from("menu_items")
+      .insert({
+        id,
+        name,
+        price: Number(price),
+        calories: Number(calories ?? 0),
+        meal_type: mealType,
+        conditions: conditions ?? [],
+        glycemic_index: glycemicIndex ?? "Low",
+        sodium_level: sodiumLevel ?? "Low",
+        description: description ?? "",
+        image_url: imageUrl ?? null,
+        is_available: true,
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return res.status(201).json(mapMealItem(data));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/menu-items/:id", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  const { id } = req.params;
+  try {
+    const { name, price, calories, mealType, conditions, glycemicIndex, sodiumLevel, description, imageUrl, isAvailable } = req.body;
+    const updates: any = { updated_at: new Date().toISOString() };
+    if (name !== undefined) updates.name = name;
+    if (price !== undefined) updates.price = Number(price);
+    if (calories !== undefined) updates.calories = Number(calories);
+    if (mealType !== undefined) updates.meal_type = mealType;
+    if (conditions !== undefined) updates.conditions = conditions;
+    if (glycemicIndex !== undefined) updates.glycemic_index = glycemicIndex;
+    if (sodiumLevel !== undefined) updates.sodium_level = sodiumLevel;
+    if (description !== undefined) updates.description = description;
+    if (imageUrl !== undefined) updates.image_url = imageUrl;
+    if (isAvailable !== undefined) updates.is_available = isAvailable;
+    const { data, error } = await supabase
+      .from("menu_items")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: "Item not found" });
+    return res.json(mapMealItem(data));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/menu-items/:id", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  const { id } = req.params;
+  try {
+    const { error } = await supabase.from("menu_items").delete().eq("id", id);
+    if (error) throw error;
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/upload-image", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const { base64, filename, contentType } = req.body;
+    if (!base64 || !filename) return res.status(400).json({ error: "base64 and filename required" });
+    const buffer = Buffer.from(base64, "base64");
+    await supabase.storage.createBucket("meal-images", { public: true }).catch(() => {});
+    const safeName = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const { error } = await supabase.storage
+      .from("meal-images")
+      .upload(safeName, buffer, { contentType: contentType ?? "image/jpeg", upsert: true });
+    if (error) throw error;
+    const { data: urlData } = supabase.storage.from("meal-images").getPublicUrl(safeName);
+    return res.json({ url: urlData.publicUrl });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/settings", authMiddleware, async (_req, res) => {
+  if (!supabase) {
+    return res.json({
+      app_tagline: "The Earth's Apothecary",
+      hero_title: "Nigerian Wellness Cuisine",
+      hero_subtitle: "Food as Medicine, Culture as Cure",
+      primary_color: "#154212",
+      secondary_color: "#8b500a",
+      logo_url: "",
+      banner_url: "",
+      announcement: "",
+    });
+  }
+  try {
+    const { data, error } = await supabase.from("app_settings").select("key, value");
+    if (error) throw error;
+    const settings: Record<string, string> = {};
+    for (const row of data ?? []) settings[row.key] = row.value ?? "";
+    return res.json(settings);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/settings", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const entries = Object.entries(req.body as Record<string, string>);
+    const upserts = entries.map(([key, value]) => ({
+      key,
+      value: String(value),
+      updated_at: new Date().toISOString(),
+    }));
+    const { error } = await supabase.from("app_settings").upsert(upserts, { onConflict: "key" });
+    if (error) throw error;
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 router.get("/clinical-staff", authMiddleware, async (_req, res) => {
@@ -247,7 +413,10 @@ router.post("/prescriptions", authMiddleware, async (req, res) => {
 router.get("/analytics", authMiddleware, async (_req, res) => {
   if (!supabase) return res.status(503).json({ error: "Database not configured" });
   try {
-    const { data: orders } = await supabase.from("orders").select("total, created_at, status").order("created_at", { ascending: false }).limit(200);
+    const [{ data: orders }, { data: menuItems }] = await Promise.all([
+      supabase.from("orders").select("total, created_at, status").order("created_at", { ascending: false }).limit(200),
+      supabase.from("menu_items").select("id, name").limit(5),
+    ]);
     const all = orders ?? [];
     const now = new Date();
     const weeklyOrders = Array.from({ length: 7 }, (_, i) => {
@@ -256,12 +425,18 @@ router.get("/analytics", authMiddleware, async (_req, res) => {
       const day = d.toISOString().split("T")[0];
       return all.filter((o: any) => (o.created_at ?? "").startsWith(day)).length;
     });
-    const weeklyRevenue = weeklyOrders.map((count) => count * (all.length > 0 ? Math.round(all.reduce((s: number, o: any) => s + (o.total ?? 0), 0) / Math.max(all.length, 1)) : 7200));
+    const avgOrder = all.length > 0 ? Math.round(all.reduce((s: number, o: any) => s + (o.total ?? 0), 0) / all.length) : 7200;
+    const weeklyRevenue = weeklyOrders.map((count) => count * avgOrder);
+    const topItems = (menuItems ?? FALLBACK_MENU.slice(0, 5)).map((m: any) => ({
+      name: m.name,
+      orders: 0,
+      revenue: 0,
+    }));
     return res.json({
       weeklyOrders,
       weeklyRevenue,
       conditionTrend: [],
-      topMeals: MENU_ITEMS.slice(0, 5).map((m) => ({ name: m.name, orders: 0, revenue: 0 })),
+      topMeals: topItems,
       totalOrders: all.length,
     });
   } catch (err: any) {

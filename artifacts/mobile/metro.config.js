@@ -15,16 +15,19 @@ config.resolver.nodeModulesPaths = [
   path.resolve(__dirname, "node_modules"),
 ];
 
-// Block Metro from watching Vite temp dirs that appear/disappear during hot reload
-// This prevents ENOENT crashes when Vite creates and destroys temp dependency dirs
+// Block Metro from watching temp dirs that appear/disappear (Vite, AWS SDK, etc.)
+// This prevents ENOENT crashes when build tools create and destroy temp dirs
 const { blockList: existingBlockList } = config.resolver;
-const VITE_TEMP_RE = /[/\\]\.vite[/\\]/;
+const TEMP_PATTERNS = [
+  /[/\\]\.vite[/\\]/,
+  /@aws-sdk[^/\\]*[/\\][^/\\]*_tmp_\d+/,
+];
 
 if (existingBlockList) {
   const existing = Array.isArray(existingBlockList) ? existingBlockList : [existingBlockList];
-  config.resolver.blockList = [VITE_TEMP_RE, ...existing];
+  config.resolver.blockList = [...TEMP_PATTERNS, ...existing];
 } else {
-  config.resolver.blockList = VITE_TEMP_RE;
+  config.resolver.blockList = TEMP_PATTERNS;
 }
 
 module.exports = config;

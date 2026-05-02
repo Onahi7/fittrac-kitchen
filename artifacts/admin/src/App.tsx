@@ -10,6 +10,7 @@ import Orders from "@/pages/Orders";
 import Menu from "@/pages/Menu";
 import Analytics from "@/pages/Analytics";
 import Wellness from "@/pages/Wellness";
+import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -51,6 +52,7 @@ function AppRouter() {
         <Route path="/menu" component={Menu} />
         <Route path="/analytics" component={Analytics} />
         <Route path="/wellness" component={Wellness} />
+        <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
     </ProtectedLayout>

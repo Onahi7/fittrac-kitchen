@@ -25,7 +25,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 function OrderStatusTracker({ status }: { status: Order["status"] }) {
   const colors = useColors();
-  const currentIndex = STATUS_STEPS.indexOf(status);
+  const currentIndex = (STATUS_STEPS as readonly string[]).indexOf(status);
 
   return (
     <View style={styles.tracker}>

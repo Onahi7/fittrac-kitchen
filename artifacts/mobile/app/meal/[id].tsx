@@ -75,7 +75,7 @@ export default function MealDetailScreen() {
       >
         <View style={styles.imageWrapper}>
           <Image
-            source={meal.image}
+            source={meal.image as any}
             style={styles.heroImage}
             resizeMode="cover"
           />

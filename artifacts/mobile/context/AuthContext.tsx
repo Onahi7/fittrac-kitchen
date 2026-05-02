@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 export interface AuthUser {
   id: string;
@@ -16,6 +17,7 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   register: (name: string, email: string, phone: string, password: string, conditions: string[]) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<AuthUser>) => Promise<void>;
@@ -33,6 +35,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     loadSession();
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" && session?.access_token) {
+        const savedToken = await AsyncStorage.getItem(TOKEN_KEY);
+        if (savedToken) return;
+        try {
+          const res = await fetch("/api/auth/google", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ access_token: session.access_token }),
+          });
+          const data = await res.json();
+          if (res.ok && data.token) {
+            await saveSession(data.token, data.user);
+          }
+        } catch {}
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   const loadSession = async () => {
@@ -101,6 +125,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await saveSession(data.token, data.user);
   }, []);
 
+  const loginWithGoogle = useCallback(async () => {
+    if (!supabase) throw new Error("Auth service not configured");
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}${window.location.pathname}`
+        : undefined;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo },
+    });
+    if (error) throw new Error(error.message);
+  }, []);
+
   const register = useCallback(async (
     name: string,
     email: string,
@@ -125,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers: { Authorization: `Bearer ${token}` },
       }).catch(() => {});
     }
+    if (supabase) await supabase.auth.signOut().catch(() => {});
     await clearSession();
   }, [token]);
 
@@ -146,7 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{
       user, token, isLoading,
       isAuthenticated: !!user && !!token,
-      login, register, logout, updateUser,
+      login, loginWithGoogle, register, logout, updateUser,
     }}>
       {children}
     </AuthContext.Provider>
