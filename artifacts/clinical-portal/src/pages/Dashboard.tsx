@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarDays, AlertTriangle, Users, Activity, FileText, CheckCircle2, Clock } from "lucide-react";
+import { CalendarDays, AlertTriangle, Users, Activity, FileText, CheckCircle2, Clock, Salad } from "lucide-react";
 import { Link } from "wouter";
 
 export default function Dashboard() {
