@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import {
+  Animated,
   Platform,
   Pressable,
   ScrollView,
@@ -161,11 +162,51 @@ function OrderCard({ order }: { order: Order }) {
   );
 }
 
+function LiveBadge({ connected }: { connected: boolean }) {
+  const colors = useColors();
+  const pulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!connected) return;
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [connected]);
+
+  return (
+    <View style={[liveBadgeStyles.container, {
+      backgroundColor: connected ? "#E8F5E9" : colors.surfaceContainer,
+    }]}>
+      <Animated.View style={[liveBadgeStyles.dot, {
+        backgroundColor: connected ? "#154212" : colors.outlineVariant,
+        opacity: connected ? pulse : 1,
+      }]} />
+      <Text style={[liveBadgeStyles.text, {
+        color: connected ? "#154212" : colors.mutedForeground,
+        fontFamily: "Manrope_600SemiBold",
+      }]}>
+        {connected ? "Live" : "Offline"}
+      </Text>
+    </View>
+  );
+}
+
+const liveBadgeStyles = StyleSheet.create({
+  container: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 100 },
+  dot: { width: 7, height: 7, borderRadius: 3.5 },
+  text: { fontSize: 12 },
+});
+
 export default function OrdersScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { orders } = useApp();
+  const { orders, sseConnected } = useApp();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -178,12 +219,15 @@ export default function OrdersScreen() {
           },
         ]}
       >
-        <Text style={[styles.title, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>
-          Orders
-        </Text>
-        <Text style={[styles.subtitle, { color: colors.mutedForeground, fontFamily: "Manrope_400Regular" }]}>
-          Track your Apothecary feasts
-        </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.title, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>
+            Orders
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground, fontFamily: "Manrope_400Regular" }]}>
+            Track your Apothecary feasts
+          </Text>
+        </View>
+        <LiveBadge connected={sseConnected} />
       </View>
 
       {orders.length === 0 ? (
@@ -225,7 +269,7 @@ export default function OrdersScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingBottom: 16, gap: 4 },
+  header: { paddingHorizontal: 20, paddingBottom: 16, gap: 4, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   title: { fontSize: 30 },
   subtitle: { fontSize: 14 },
   list: { paddingHorizontal: 20, paddingTop: 8, gap: 16 },

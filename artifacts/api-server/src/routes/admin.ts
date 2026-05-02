@@ -1,5 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
+import { broadcastOrderUpdate } from "./events";
 
 const router = Router();
 
@@ -110,6 +111,7 @@ router.patch("/orders/:id/status", authMiddleware, (req, res) => {
   const idx = mockOrderStore.findIndex((o) => o.id === id);
   if (idx === -1) return res.status(404).json({ error: "Order not found" });
   mockOrderStore[idx] = { ...mockOrderStore[idx], status };
+  broadcastOrderUpdate(id, status, { customer: mockOrderStore[idx].customer });
   return res.json(mockOrderStore[idx]);
 });
 

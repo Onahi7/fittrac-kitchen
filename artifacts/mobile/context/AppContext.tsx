@@ -33,6 +33,7 @@ interface AppContextValue {
   testRequests: TestRequest[];
   isLoading: boolean;
   isOnboarded: boolean;
+  sseConnected: boolean;
   setConditions: (conditions: Condition[]) => Promise<void>;
   setDietaryRestrictions: (restrictions: string[]) => Promise<void>;
   completeOnboarding: (conditions: Condition[]) => Promise<void>;
@@ -48,6 +49,7 @@ interface AppContextValue {
   addPrescription: (rx: Prescription) => void;
   addTestRequest: (tr: TestRequest) => void;
   updateTestRequest: (id: string, updates: Partial<TestRequest>) => void;
+  updateOrderStatus: (orderId: string, status: Order["status"]) => void;
   basketTotal: number;
   basketCount: number;
   todayNutrition: NutritionLog | null;
@@ -161,8 +163,63 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [testRequests, setTestRequests] = useState<TestRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [sseConnected, setSseConnected] = useState(false);
 
   useEffect(() => { loadData(); }, []);
+
+  useEffect(() => {
+    let active = true;
+    let retryTimer: ReturnType<typeof setTimeout>;
+
+    const connect = async () => {
+      try {
+        const res = await fetch("/api/events/stream", {
+          headers: { Accept: "text/event-stream" },
+        });
+        if (!res.ok || !res.body) throw new Error("SSE unavailable");
+        if (active) setSseConnected(true);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        while (active) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const evt = JSON.parse(line.slice(6));
+              if (evt.type === "ORDER_UPDATE" && evt.orderId) {
+                setOrders((prev) => {
+                  const updated = prev.map((o) =>
+                    o.id === evt.orderId ? { ...o, status: evt.status as Order["status"] } : o
+                  );
+                  AsyncStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(updated)).catch(() => {});
+                  return updated;
+                });
+              }
+            } catch {}
+          }
+        }
+      } catch {
+        // connection failed or dropped — retry
+      } finally {
+        if (active) {
+          setSseConnected(false);
+          retryTimer = setTimeout(connect, 6000);
+        }
+      }
+    };
+
+    connect();
+    return () => {
+      active = false;
+      clearTimeout(retryTimer);
+      setSseConnected(false);
+    };
+  }, []);
 
   const loadData = async () => {
     try {
@@ -312,6 +369,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     saveTestRequests(updated);
   }, [testRequests]);
 
+  const updateOrderStatus = useCallback((orderId: string, status: Order["status"]) => {
+    setOrders((prev) => {
+      const updated = prev.map((o) => o.id === orderId ? { ...o, status } : o);
+      AsyncStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
+  }, []);
+
   const basketTotal = basket.reduce((sum, i) => sum + i.meal.price * i.quantity, 0);
   const basketCount = basket.reduce((sum, i) => sum + i.quantity, 0);
   const today = new Date().toISOString().split("T")[0];
@@ -330,11 +395,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={{
       profile, basket, orders, weightLogs, nutritionLogs, exerciseLogs,
       waterLogs, consultations, prescriptions, testRequests,
-      isLoading, isOnboarded: profile.isOnboarded,
+      isLoading, isOnboarded: profile.isOnboarded, sseConnected,
       setConditions, setDietaryRestrictions, completeOnboarding,
       addToBasket, removeFromBasket, clearBasket, placeOrder,
       logWeight, logNutrition, logExercise, logWater, bookConsultation,
-      addPrescription, addTestRequest, updateTestRequest,
+      addPrescription, addTestRequest, updateTestRequest, updateOrderStatus,
       basketTotal, basketCount, todayNutrition, currentWeight,
       todayWater, todayExercise,
     }}>
