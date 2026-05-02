@@ -1,0 +1,32 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "ljdwFr3b8ZgHCWM0zQ9ve"
+uri = "file://artifacts/mobile/assets/images/icon.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "cVhF111V0N0aae8PvyNtn"
+uri = "file://artifacts/mobile/assets/images/meal-akara.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "LfWsCZR-MSCksj4uE9Kx6"
+uri = "file://artifacts/mobile/assets/images/meal-egusi.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "V6It9eoB30uuqWStPZ5Mw"
+uri = "file://artifacts/mobile/assets/images/meal-tilapia.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "4YSEkyotVje7rFMvl5EMR"
+uri = "file://artifacts/mobile/assets/images/drink-zobo.png"
+type = "image"
+title = "generated_image"
