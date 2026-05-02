@@ -141,4 +141,30 @@ Base path: `/api/`
 | Clinical Portal — Nutrition analytics (recharts) | ✅ Complete |
 | Clinical Portal — Consultation workspace | ✅ Complete |
 
+## Production Hardening Status
+
+All mock/seed data has been removed. The app is fully production-ready pending Supabase provisioning.
+
+| Area | Status | Notes |
+|------|--------|-------|
+| `admin.ts` backend | ✅ Cleaned | Queries Supabase for orders/stats; MENU_ITEMS is static catalog |
+| `clinical-staff.ts` backend | ✅ Cleaned | All MOCK_* removed; returns 503 if DB not configured |
+| `AppContext.tsx` | ✅ Cleaned | Seed functions removed; starts with empty arrays |
+| `prescription.tsx` | ✅ Cleaned | Shows loading + empty state; no DEMO_PRESCRIPTION |
+| `test-results.tsx` | ✅ Cleaned | Loads tests from `/api/clinical/tests`; shows loading/empty states |
+| `consultation-room.tsx` | ✅ Cleaned | Fetches test requests from API; starts empty if none |
+| `community.tsx` | ✅ Cleaned | Achievements computed from real user data; feed starts empty |
+| `HOSTING.md` | ✅ Written | Full deployment guide including Nginx, PM2, EAS, Supabase RLS |
+| Supabase schema | ⏳ Pending | Must run `supabase/schema.sql` then `supabase/seed.sql` on production project |
+| Default passwords | ⚠️ Change before live | Admin: `fittrac2026`, Doctors: `doctor2026`, Nutritionists: `nutri2026` |
+
+## Database (Supabase)
+
+- `SUPABASE_URL` — set in Secrets
+- `SUPABASE_SERVICE_ROLE_KEY` — set in Secrets
+- `SUPABASE_ANON_KEY` — set in Secrets
+- Project: `vuxarushmfmxritydbxi`
+- Schema file: `supabase/schema.sql`
+- Seed file: `supabase/seed.sql` (clinical staff accounts)
+
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.

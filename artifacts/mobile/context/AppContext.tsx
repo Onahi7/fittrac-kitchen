@@ -79,79 +79,6 @@ const defaultProfile: UserProfile = {
   dietaryRestrictions: [],
 };
 
-function seedWeightLogs(): WeightLog[] {
-  const logs: WeightLog[] = [];
-  const base = 78.4;
-  for (let i = 6; i >= 1; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    logs.push({
-      date: d.toISOString().split("T")[0],
-      weight: parseFloat((base - (6 - i) * 0.3 + Math.random() * 0.4).toFixed(1)),
-    });
-  }
-  return logs;
-}
-
-function seedNutritionLogs(): NutritionLog[] {
-  const logs: NutritionLog[] = [];
-  for (let i = 5; i >= 1; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    logs.push({
-      date: d.toISOString().split("T")[0],
-      calories: 1600 + Math.floor(Math.random() * 400),
-      protein: 85 + Math.floor(Math.random() * 30),
-      carbs: 160 + Math.floor(Math.random() * 60),
-      fat: 55 + Math.floor(Math.random() * 20),
-      fiber: 22 + Math.floor(Math.random() * 12),
-      source: "order",
-      label: "Daily Total",
-    });
-  }
-  return logs;
-}
-
-const EXERCISE_TYPES = ["Walking", "Jogging", "Cycling", "Swimming", "Strength Training", "Yoga", "HIIT", "Dance"];
-const INTENSITIES: Array<"Low" | "Medium" | "High"> = ["Low", "Medium", "High"];
-const CAL_PER_MIN: Record<string, number> = {
-  Walking: 4, Jogging: 8, Cycling: 7, Swimming: 8.5,
-  "Strength Training": 6, Yoga: 3, HIIT: 10, Dance: 5,
-};
-const INTENSITY_MULT: Record<string, number> = { Low: 0.7, Medium: 1.0, High: 1.3 };
-
-function seedExerciseLogs(): ExerciseLog[] {
-  const logs: ExerciseLog[] = [];
-  for (let i = 6; i >= 1; i--) {
-    if (Math.random() > 0.3) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const type = EXERCISE_TYPES[Math.floor(Math.random() * EXERCISE_TYPES.length)];
-      const duration = [20, 30, 45, 60][Math.floor(Math.random() * 4)];
-      const intensity = INTENSITIES[Math.floor(Math.random() * 3)];
-      logs.push({
-        id: `ex-${d.getTime()}`,
-        date: d.toISOString().split("T")[0],
-        type,
-        duration,
-        intensity,
-        caloriesBurned: Math.round((CAL_PER_MIN[type] ?? 5) * duration * INTENSITY_MULT[intensity]),
-      });
-    }
-  }
-  return logs;
-}
-
-function seedWaterLogs(): WaterLog[] {
-  const logs: WaterLog[] = [];
-  for (let i = 6; i >= 1; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    logs.push({ date: d.toISOString().split("T")[0], glasses: 4 + Math.floor(Math.random() * 5) });
-  }
-  return logs;
-}
-
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const { user, token } = useAuth();
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
@@ -280,22 +207,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       if (profileStr) setProfile(JSON.parse(profileStr));
       if (ordersStr) setOrders(JSON.parse(ordersStr));
-      if (weightStr) { setWeightLogs(JSON.parse(weightStr)); } else {
-        const seed = seedWeightLogs(); setWeightLogs(seed);
-        await AsyncStorage.setItem(STORAGE_KEYS.weightLogs, JSON.stringify(seed));
-      }
-      if (nutritionStr) { setNutritionLogs(JSON.parse(nutritionStr)); } else {
-        const seed = seedNutritionLogs(); setNutritionLogs(seed);
-        await AsyncStorage.setItem(STORAGE_KEYS.nutritionLogs, JSON.stringify(seed));
-      }
-      if (exerciseStr) { setExerciseLogs(JSON.parse(exerciseStr)); } else {
-        const seed = seedExerciseLogs(); setExerciseLogs(seed);
-        await AsyncStorage.setItem(STORAGE_KEYS.exerciseLogs, JSON.stringify(seed));
-      }
-      if (waterStr) { setWaterLogs(JSON.parse(waterStr)); } else {
-        const seed = seedWaterLogs(); setWaterLogs(seed);
-        await AsyncStorage.setItem(STORAGE_KEYS.waterLogs, JSON.stringify(seed));
-      }
+      if (weightStr) setWeightLogs(JSON.parse(weightStr));
+      if (nutritionStr) setNutritionLogs(JSON.parse(nutritionStr));
+      if (exerciseStr) setExerciseLogs(JSON.parse(exerciseStr));
+      if (waterStr) setWaterLogs(JSON.parse(waterStr));
       if (consultStr) setConsultations(JSON.parse(consultStr));
       if (rxStr) setPrescriptions(JSON.parse(rxStr));
       if (trStr) setTestRequests(JSON.parse(trStr));

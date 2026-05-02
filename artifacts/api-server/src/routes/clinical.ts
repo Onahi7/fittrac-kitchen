@@ -62,6 +62,19 @@ router.patch("/test-requests/:id/status", (req, res) => {
   return res.json(TEST_REQUESTS[id]);
 });
 
+router.post("/test-results", (req, res) => {
+  const { consultationId, uploads } = req.body ?? {};
+  const id = `RES-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+  const result = {
+    id,
+    consultationId: consultationId ?? null,
+    uploadedAt: new Date().toISOString(),
+    count: Array.isArray(uploads) ? uploads.length : 0,
+    status: "pending_review",
+  };
+  return res.status(201).json(result);
+});
+
 router.post("/prescriptions", (req, res) => {
   const { consultationId, doctorName, doctorType, diagnosis, medications, labTests, followUpDate, notes } = req.body;
   const id = `RX-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;

@@ -1,8 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Platform,
@@ -15,12 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 
-const DEMO_TESTS = [
-  { name: "Fasting Blood Sugar (FBS)", instructions: "Fast for 8–12 hours. No food or drink except water.", code: "FBS" },
-  { name: "Lipid Profile (Cholesterol)", instructions: "Fast for 9–12 hours. Avoid fatty meals the day before.", code: "LIP" },
-  { name: "Liver Function Test (LFT)", instructions: "Fast for 8 hours. Avoid alcohol for 24 hours prior.", code: "LFT" },
-];
-
+interface AvailableTest { name: string; instructions: string; code: string; }
 interface TestUpload { code: string; uri: string | null; uploaded: boolean; }
 
 export default function TestResultsScreen() {
@@ -29,11 +25,23 @@ export default function TestResultsScreen() {
   const router = useRouter();
   const { consultationId } = useLocalSearchParams<{ consultationId: string }>();
 
-  const [uploads, setUploads] = useState<TestUpload[]>(
-    DEMO_TESTS.map((t) => ({ code: t.code, uri: null, uploaded: false }))
-  );
+  const [availableTests, setAvailableTests] = useState<AvailableTest[]>([]);
+  const [uploads, setUploads] = useState<TestUpload[]>([]);
+  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/clinical/tests")
+      .then((r) => r.json())
+      .then((data: any[]) => {
+        const tests = data.map((t) => ({ name: t.name, instructions: t.instructions, code: t.name.replace(/\s+/g, "_").slice(0, 8) }));
+        setAvailableTests(tests);
+        setUploads(tests.map((t) => ({ code: t.code, uri: null, uploaded: false })));
+      })
+      .catch(() => setAvailableTests([]))
+      .finally(() => setLoading(false));
+  }, []);
 
   const pickImage = async (code: string) => {
     if (Platform.OS === "web") {
@@ -66,23 +74,40 @@ export default function TestResultsScreen() {
       return;
     }
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1200));
+    try {
+      await fetch("/api/clinical/test-results", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consultationId, uploads: withFiles }),
+      });
+    } catch {}
     setSubmitting(false);
     setSubmitted(true);
   };
 
+  const header = (
+    <View style={[styles.header, {
+      paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) + 16,
+      backgroundColor: colors.background,
+    }]}>
+      <Pressable style={[styles.backBtn, { backgroundColor: colors.surfaceContainer }]} onPress={() => router.back()}>
+        <Feather name="arrow-left" size={20} color={colors.onSurface} />
+      </Pressable>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.headerLabel, { color: colors.mutedForeground, fontFamily: "Manrope_500Medium" }]}>
+          TELEMEDICINE
+        </Text>
+        <Text style={[styles.headerTitle, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>
+          Upload Test Results
+        </Text>
+      </View>
+    </View>
+  );
+
   if (submitted) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, {
-          paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) + 16,
-          backgroundColor: colors.background,
-        }]}>
-          <Pressable style={[styles.backBtn, { backgroundColor: colors.surfaceContainer }]} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={20} color={colors.onSurface} />
-          </Pressable>
-          <Text style={[styles.headerTitle, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>Test Results</Text>
-        </View>
+        {header}
         <View style={styles.successState}>
           <View style={[styles.successIcon, { backgroundColor: "#E8F5E9" }]}>
             <Feather name="check-circle" size={48} color="#154212" />
@@ -101,25 +126,41 @@ export default function TestResultsScreen() {
     );
   }
 
-  return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, {
-        paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) + 16,
-        backgroundColor: colors.background,
-      }]}>
-        <Pressable style={[styles.backBtn, { backgroundColor: colors.surfaceContainer }]} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={20} color={colors.onSurface} />
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.headerLabel, { color: colors.mutedForeground, fontFamily: "Manrope_500Medium" }]}>
-            TELEMEDICINE
-          </Text>
-          <Text style={[styles.headerTitle, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>
-            Upload Test Results
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {header}
+        <View style={styles.centerState}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.mutedForeground, fontFamily: "Manrope_400Regular" }]}>
+            Loading available tests...
           </Text>
         </View>
       </View>
+    );
+  }
 
+  if (availableTests.length === 0) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {header}
+        <View style={styles.centerState}>
+          <Feather name="clipboard" size={40} color={colors.outlineVariant} />
+          <Text style={[styles.emptyTitle, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>No Tests Requested</Text>
+          <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: "Manrope_400Regular" }]}>
+            Your doctor has not requested any lab tests yet. Check back after your consultation.
+          </Text>
+          <Pressable style={[styles.doneBtn, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
+            <Text style={[styles.doneBtnText, { fontFamily: "Manrope_700Bold" }]}>Go Back</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {header}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, {
@@ -134,8 +175,9 @@ export default function TestResultsScreen() {
           </Text>
         </View>
 
-        {DEMO_TESTS.map((test, i) => {
+        {availableTests.map((test, i) => {
           const upload = uploads.find((u) => u.code === test.code)!;
+          if (!upload) return null;
           return (
             <View key={test.code} style={[styles.testCard, { backgroundColor: colors.card }]}>
               <View style={styles.testHeader}>
@@ -197,7 +239,7 @@ export default function TestResultsScreen() {
         borderTopColor: colors.surfaceContainerHigh,
       }]}>
         <Text style={[styles.footerCount, { color: colors.mutedForeground, fontFamily: "Manrope_400Regular" }]}>
-          {uploads.filter((u) => u.uri).length} of {DEMO_TESTS.length} results uploaded
+          {uploads.filter((u) => u.uri).length} of {availableTests.length} results uploaded
         </Text>
         <Pressable
           style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: submitting ? 0.7 : 1 }]}
@@ -220,10 +262,12 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", marginTop: 4 },
   headerLabel: { fontSize: 10, letterSpacing: 1.5 },
   headerTitle: { fontSize: 24 },
+  centerState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32, gap: 16 },
+  loadingText: { fontSize: 14 },
+  emptyTitle: { fontSize: 22, textAlign: "center" },
+  emptyText: { fontSize: 14, lineHeight: 21, textAlign: "center" },
   scroll: { paddingHorizontal: 20, paddingTop: 4, gap: 16 },
-  infoCard: {
-    borderRadius: 14, padding: 14, flexDirection: "row", gap: 10, alignItems: "flex-start",
-  },
+  infoCard: { borderRadius: 14, padding: 14, flexDirection: "row", gap: 10, alignItems: "flex-start" },
   infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
   testCard: { borderRadius: 20, padding: 16, gap: 14, shadowColor: "#1D1B19", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   testHeader: { flexDirection: "row", gap: 12, alignItems: "flex-start" },

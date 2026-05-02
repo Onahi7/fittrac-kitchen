@@ -1,12 +1,12 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { broadcastOrderUpdate } from "./events";
+import { supabase } from "../lib/supabase.js";
 
 const router = Router();
 
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "fittrac2026";
-
 const activeSessions = new Set<string>();
 
 function generateToken(): string {
@@ -22,29 +22,16 @@ function authMiddleware(req: any, res: any, next: any) {
   next();
 }
 
-const MOCK_ORDERS = [
-  { id: "VIT-1021", customer: "Amaka O.", total: 8700, status: "confirmed", fulfillment: "delivery", items: ["Egusi Soup + Pounded Yam", "Zobo Detox"], date: "2026-05-02", condition: "hypertension" },
-  { id: "VIT-1020", customer: "Emeka N.", total: 6200, status: "preparing", fulfillment: "pickup", items: ["Tilapia Pepper Soup"], date: "2026-05-02", condition: "diabetes" },
-  { id: "VIT-1019", customer: "Fatima A.", total: 11400, status: "ready", fulfillment: "delivery", items: ["Akara Protein Balls x2", "Turmeric Ginger Elixir"], date: "2026-05-02", condition: "weightloss" },
-  { id: "VIT-1018", customer: "Bola F.", total: 7500, status: "delivered", fulfillment: "delivery", items: ["Moi Moi Health Bowl"], date: "2026-05-01", condition: "liver" },
-  { id: "VIT-1017", customer: "Chidi U.", total: 9100, status: "delivered", fulfillment: "pickup", items: ["Jollof Brown Rice", "Moringa Power Smoothie"], date: "2026-05-01", condition: "diabetes" },
-  { id: "VIT-1016", customer: "Ngozi E.", total: 5800, status: "delivered", fulfillment: "delivery", items: ["Ogbono Light Soup"], date: "2026-05-01", condition: "hypertension" },
-  { id: "VIT-1015", customer: "Seun A.", total: 13200, status: "confirmed", fulfillment: "delivery", items: ["Akara x2", "Tilapia Pepper Soup", "Zobo Detox"], date: "2026-05-02", condition: "weightloss" },
-  { id: "VIT-1014", customer: "Kemi B.", total: 7900, status: "confirmed", fulfillment: "pickup", items: ["Egusi Soup + Pounded Yam"], date: "2026-05-02", condition: "liver" },
-];
-
-const mockOrderStore = [...MOCK_ORDERS];
-
-const MOCK_MEALS = [
-  { id: "m1", name: "Akara Protein Balls", price: 3200, calories: 340, mealType: "breakfast", conditions: ["weightloss", "diabetes"], glycemicIndex: "Low", sodiumLevel: "Low", orders: 47 },
-  { id: "m2", name: "Egusi Soup + Pounded Yam", price: 5800, calories: 520, mealType: "lunch", conditions: ["hypertension", "liver"], glycemicIndex: "Medium", sodiumLevel: "Low", orders: 89 },
-  { id: "m3", name: "Tilapia Pepper Soup", price: 6200, calories: 280, mealType: "lunch", conditions: ["diabetes", "liver", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Medium", orders: 62 },
-  { id: "m4", name: "Moi Moi Health Bowl", price: 4500, calories: 380, mealType: "dinner", conditions: ["weightloss", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Low", orders: 54 },
-  { id: "m5", name: "Jollof Brown Rice", price: 4800, calories: 420, mealType: "lunch", conditions: ["diabetes", "weightloss"], glycemicIndex: "Low", sodiumLevel: "Low", orders: 71 },
-  { id: "m6", name: "Ogbono Light Soup", price: 5200, calories: 310, mealType: "dinner", conditions: ["liver", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Low", orders: 38 },
-  { id: "m7", name: "Zobo Detox Drink", price: 1800, calories: 45, mealType: "drink", conditions: ["hypertension", "liver"], glycemicIndex: "Low", sodiumLevel: "Low", orders: 95 },
-  { id: "m8", name: "Moringa Power Smoothie", price: 2200, calories: 120, mealType: "drink", conditions: ["diabetes", "weightloss", "liver"], glycemicIndex: "Low", sodiumLevel: "Low", orders: 78 },
-  { id: "m9", name: "Turmeric Ginger Elixir", price: 2000, calories: 60, mealType: "drink", conditions: ["hypertension", "liver", "allergies"], glycemicIndex: "Low", sodiumLevel: "Low", orders: 63 },
+const MENU_ITEMS = [
+  { id: "m1", name: "Akara Protein Balls", price: 3200, calories: 340, mealType: "breakfast", conditions: ["weightloss", "diabetes"], glycemicIndex: "Low", sodiumLevel: "Low" },
+  { id: "m2", name: "Egusi Soup + Pounded Yam", price: 5800, calories: 520, mealType: "lunch", conditions: ["hypertension", "liver"], glycemicIndex: "Medium", sodiumLevel: "Low" },
+  { id: "m3", name: "Tilapia Pepper Soup", price: 6200, calories: 280, mealType: "lunch", conditions: ["diabetes", "liver", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Medium" },
+  { id: "m4", name: "Moi Moi Health Bowl", price: 4500, calories: 380, mealType: "dinner", conditions: ["weightloss", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Low" },
+  { id: "m5", name: "Jollof Brown Rice", price: 4800, calories: 420, mealType: "lunch", conditions: ["diabetes", "weightloss"], glycemicIndex: "Low", sodiumLevel: "Low" },
+  { id: "m6", name: "Ogbono Light Soup", price: 5200, calories: 310, mealType: "dinner", conditions: ["liver", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Low" },
+  { id: "m7", name: "Zobo Detox Drink", price: 1800, calories: 45, mealType: "drink", conditions: ["hypertension", "liver"], glycemicIndex: "Low", sodiumLevel: "Low" },
+  { id: "m8", name: "Moringa Power Smoothie", price: 2200, calories: 120, mealType: "drink", conditions: ["diabetes", "weightloss", "liver"], glycemicIndex: "Low", sodiumLevel: "Low" },
+  { id: "m9", name: "Turmeric Ginger Elixir", price: 2000, calories: 60, mealType: "drink", conditions: ["hypertension", "liver", "allergies"], glycemicIndex: "Low", sodiumLevel: "Low" },
 ];
 
 router.post("/login", (req, res) => {
@@ -64,74 +51,107 @@ router.post("/logout", authMiddleware, (req, res) => {
   return res.json({ success: true });
 });
 
-router.get("/stats", authMiddleware, (_req, res) => {
-  const today = new Date().toISOString().split("T")[0];
-  const todayOrders = mockOrderStore.filter((o) => o.date === today);
-  const totalRevenue = mockOrderStore.reduce((s, o) => s + o.total, 0);
-  const todayRevenue = todayOrders.reduce((s, o) => s + o.total, 0);
-  const conditionBreakdown = {
-    hypertension: mockOrderStore.filter((o) => o.condition === "hypertension").length,
-    diabetes: mockOrderStore.filter((o) => o.condition === "diabetes").length,
-    weightloss: mockOrderStore.filter((o) => o.condition === "weightloss").length,
-    liver: mockOrderStore.filter((o) => o.condition === "liver").length,
-  };
-  const statusBreakdown = {
-    confirmed: mockOrderStore.filter((o) => o.status === "confirmed").length,
-    preparing: mockOrderStore.filter((o) => o.status === "preparing").length,
-    ready: mockOrderStore.filter((o) => o.status === "ready").length,
-    delivered: mockOrderStore.filter((o) => o.status === "delivered").length,
-  };
-
-  return res.json({
-    totalOrders: mockOrderStore.length,
-    todayOrders: todayOrders.length,
-    totalRevenue,
-    todayRevenue,
-    totalMeals: MOCK_MEALS.length,
-    conditionBreakdown,
-    statusBreakdown,
-    topMeal: "Egusi Soup + Pounded Yam",
-    avgOrderValue: Math.round(totalRevenue / mockOrderStore.length),
-  });
+router.get("/stats", authMiddleware, async (_req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const { data: orders } = await supabase.from("orders").select("id, total, status, fulfillment, created_at");
+    const all = orders ?? [];
+    const todayOrders = all.filter((o: any) => (o.created_at ?? "").startsWith(today));
+    const totalRevenue = all.reduce((s: number, o: any) => s + (o.total ?? 0), 0);
+    const todayRevenue = todayOrders.reduce((s: number, o: any) => s + (o.total ?? 0), 0);
+    const statusBreakdown: Record<string, number> = {};
+    for (const o of all) statusBreakdown[o.status] = (statusBreakdown[o.status] ?? 0) + 1;
+    return res.json({
+      totalOrders: all.length,
+      todayOrders: todayOrders.length,
+      totalRevenue,
+      todayRevenue,
+      totalMeals: MENU_ITEMS.length,
+      conditionBreakdown: {},
+      statusBreakdown,
+      topMeal: MENU_ITEMS[1].name,
+      avgOrderValue: all.length > 0 ? Math.round(totalRevenue / all.length) : 0,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
-router.get("/orders", authMiddleware, (req, res) => {
-  const { status, date } = req.query;
-  let filtered = [...mockOrderStore];
-  if (status && typeof status === "string") filtered = filtered.filter((o) => o.status === status);
-  if (date && typeof date === "string") filtered = filtered.filter((o) => o.date === date);
-  return res.json(filtered.sort((a, b) => b.id.localeCompare(a.id)));
+router.get("/orders", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const { status, date } = req.query;
+    let query = supabase
+      .from("orders")
+      .select("*, users(name, email, conditions)")
+      .order("created_at", { ascending: false });
+    if (status && typeof status === "string") query = query.eq("status", status);
+    if (date && typeof date === "string") query = query.gte("created_at", `${date}T00:00:00`).lte("created_at", `${date}T23:59:59`);
+    const { data, error } = await query;
+    if (error) throw error;
+    const mapped = (data ?? []).map((o: any) => ({
+      id: o.id,
+      customer: o.users?.name ?? o.user_id ?? "Unknown",
+      total: o.total,
+      status: o.status,
+      fulfillment: o.fulfillment,
+      items: Array.isArray(o.items) ? o.items.map((i: any) => i.meal?.name ?? i.name ?? "Item") : [],
+      date: (o.created_at ?? "").split("T")[0],
+      condition: (o.users?.conditions ?? [])[0] ?? "general",
+      address: o.address ?? "",
+      paymentMethod: o.payment_method ?? "",
+    }));
+    return res.json(mapped);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
-router.patch("/orders/:id/status", authMiddleware, (req, res) => {
+router.patch("/orders/:id/status", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
   const { id } = req.params;
   const { status } = req.body;
   const allowed = ["confirmed", "preparing", "ready", "delivered", "cancelled"];
   if (!allowed.includes(status)) return res.status(400).json({ error: "Invalid status" });
-  const idx = mockOrderStore.findIndex((o) => o.id === id);
-  if (idx === -1) return res.status(404).json({ error: "Order not found" });
-  mockOrderStore[idx] = { ...mockOrderStore[idx], status };
-  broadcastOrderUpdate(id, status, { customer: mockOrderStore[idx].customer });
-  return res.json(mockOrderStore[idx]);
+  try {
+    const { data, error } = await supabase.from("orders").update({ status }).eq("id", id).select("*, users(name)").single();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: "Order not found" });
+    broadcastOrderUpdate(id, status, { customer: data.users?.name ?? "" });
+    return res.json({ id: data.id, status: data.status, customer: data.users?.name ?? "" });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 router.get("/meals", authMiddleware, (_req, res) => {
-  return res.json(MOCK_MEALS.sort((a, b) => b.orders - a.orders));
+  return res.json(MENU_ITEMS);
 });
 
-router.get("/analytics", authMiddleware, (_req, res) => {
-  const weeklyOrders = [12, 18, 15, 22, 19, 25, 17];
-  const weeklyRevenue = weeklyOrders.map((o) => o * 7200);
-  const conditionTrend = [
-    { condition: "Hypertension", count: 38, pct: 35 },
-    { condition: "Weight Loss", count: 31, pct: 29 },
-    { condition: "Diabetes", count: 24, pct: 22 },
-    { condition: "Liver Health", count: 15, pct: 14 },
-  ];
-  const topMeals = MOCK_MEALS.sort((a, b) => b.orders - a.orders).slice(0, 5).map((m) => ({
-    name: m.name, orders: m.orders, revenue: m.orders * m.price,
-  }));
-  return res.json({ weeklyOrders, weeklyRevenue, conditionTrend, topMeals });
+router.get("/analytics", authMiddleware, async (_req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const { data: orders } = await supabase.from("orders").select("total, created_at, status").order("created_at", { ascending: false }).limit(200);
+    const all = orders ?? [];
+    const now = new Date();
+    const weeklyOrders = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() - (6 - i));
+      const day = d.toISOString().split("T")[0];
+      return all.filter((o: any) => (o.created_at ?? "").startsWith(day)).length;
+    });
+    const weeklyRevenue = weeklyOrders.map((count) => count * (all.length > 0 ? Math.round(all.reduce((s: number, o: any) => s + (o.total ?? 0), 0) / Math.max(all.length, 1)) : 7200));
+    return res.json({
+      weeklyOrders,
+      weeklyRevenue,
+      conditionTrend: [],
+      topMeals: MENU_ITEMS.slice(0, 5).map((m) => ({ name: m.name, orders: 0, revenue: 0 })),
+      totalOrders: all.length,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

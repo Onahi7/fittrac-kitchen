@@ -18,11 +18,7 @@ import { useColors } from "@/hooks/useColors";
 type PanelType = null | "chat" | "tests" | "prescription";
 
 interface ChatMsg { role: "user" | "doctor"; text: string; time: string; }
-
-const DEMO_TEST_REQUESTS = [
-  { name: "Fasting Blood Sugar (FBS)", instructions: "Fast for 8–12 hours. No food or drink except water.", status: "pending" },
-  { name: "Lipid Profile", instructions: "Fast for 9–12 hours. Avoid fatty meals the day before.", status: "pending" },
-];
+interface TestRequest { name: string; instructions: string; status: string; }
 
 export default function ConsultationRoomScreen() {
   const insets = useSafeAreaInsets();
@@ -47,7 +43,22 @@ export default function ConsultationRoomScreen() {
   const [chatMsgs, setChatMsgs] = useState<ChatMsg[]>([
     { role: "doctor", text: `Hello! I'm ${consult.specialistName}. I've reviewed your health profile. Let's get started — how have you been feeling this week?`, time: "0:00" },
   ]);
-  const [testRequests] = useState(DEMO_TEST_REQUESTS);
+  const [testRequests, setTestRequests] = useState<TestRequest[]>([]);
+
+  useEffect(() => {
+    if (!consultationId) return;
+    fetch(`/api/clinical/test-requests/consultation/${consultationId}`)
+      .then((r) => r.json())
+      .then((data: any[]) => {
+        if (Array.isArray(data)) {
+          const flat: TestRequest[] = data.flatMap((tr) =>
+            (tr.tests ?? []).map((t: any) => ({ name: t.name, instructions: t.instructions, status: tr.status ?? "pending" }))
+          );
+          setTestRequests(flat);
+        }
+      })
+      .catch(() => {});
+  }, [consultationId]);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;

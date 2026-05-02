@@ -20,7 +20,7 @@ export interface BasketItem {
 
 export interface Order {
   id: string; items: BasketItem[]; createdAt: string; deliveryDate: string;
-  status: "confirmed" | "preparing" | "ready" | "delivered"; fulfillment: "delivery" | "pickup";
+  status: "confirmed" | "preparing" | "ready" | "delivered" | "cancelled"; fulfillment: "delivery" | "pickup";
   address: string; total: number; paymentMethod: string;
 }
 

@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import {
+  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
@@ -13,68 +14,70 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useApp } from "@/context/AppContext";
 
-const DEMO_PRESCRIPTION = {
-  id: "RX-DEMO001",
-  doctorName: "Dr. Adaeze Okonkwo",
-  doctorType: "Clinical Nutritionist & Dietitian",
-  issuedAt: new Date().toISOString(),
-  diagnosis: "Type 2 Diabetes with Dyslipidemia — well-controlled. Continue low glycaemic index dietary protocol with Mediterranean-Nigerian fusion.",
-  medications: [
-    {
-      name: "Metformin 500mg",
-      dosage: "500mg",
-      frequency: "Twice daily (morning & evening)",
-      duration: "Ongoing — review at next consultation",
-      instructions: "Take with food to reduce GI side effects. Do not crush or chew.",
-    },
-    {
-      name: "Omega-3 Fish Oil",
-      dosage: "1000mg",
-      frequency: "Once daily with largest meal",
-      duration: "3 months",
-      instructions: "Supplement for cardiovascular support. Store in cool, dry place.",
-    },
-    {
-      name: "Moringa Leaf Extract",
-      dosage: "500mg",
-      frequency: "Once daily — morning",
-      duration: "2 months, then reassess",
-      instructions: "Natural blood sugar support. Take 30 minutes before breakfast.",
-    },
-  ],
-  labTests: ["Repeat HbA1c in 3 months", "Fasting Lipid Profile in 6 weeks", "Fasting Blood Sugar — weekly self-monitoring"],
-  followUpDate: "In 6 weeks",
-  notes: "Patient shows strong adherence to dietary modifications. Recommend continuing Fittrac Kitchen low-GI meal plan. Reduce refined carbohydrates, increase daily legume intake (Ewa Oloyin, black-eyed peas). Hydration target: 2.5L per day. Exercise: 30 min moderate intensity, 5×/week.",
-};
-
 export default function PrescriptionScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { prescriptionId } = useLocalSearchParams<{ prescriptionId: string }>();
-  const { prescriptions } = useApp();
+  const { prescriptions, isLoading } = useApp();
 
-  const rx = prescriptions.find((p) => p.id === prescriptionId) ?? DEMO_PRESCRIPTION;
+  const rx = prescriptions.find((p) => p.id === prescriptionId) ?? null;
+
+  const header = (
+    <View style={[styles.header, {
+      paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) + 16,
+      backgroundColor: colors.background,
+    }]}>
+      <Pressable style={[styles.backBtn, { backgroundColor: colors.surfaceContainer }]} onPress={() => router.back()}>
+        <Feather name="arrow-left" size={20} color={colors.onSurface} />
+      </Pressable>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.headerLabel, { color: colors.mutedForeground, fontFamily: "Manrope_500Medium" }]}>TELEMEDICINE</Text>
+        <Text style={[styles.headerTitle, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>Prescription</Text>
+      </View>
+      <View style={[styles.rxBadge, { backgroundColor: "#E8F5E9" }]}>
+        <Text style={[styles.rxBadgeText, { color: colors.primary, fontFamily: "Epilogue_700Bold" }]}>Rx</Text>
+      </View>
+    </View>
+  );
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {header}
+        <View style={styles.centerState}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.centerText, { color: colors.mutedForeground, fontFamily: "Manrope_400Regular" }]}>Loading prescription...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!rx) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {header}
+        <View style={styles.centerState}>
+          <View style={[styles.emptyIcon, { backgroundColor: colors.surfaceContainerLow }]}>
+            <Feather name="file-text" size={40} color={colors.outlineVariant} />
+          </View>
+          <Text style={[styles.emptyTitle, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>No Prescription Found</Text>
+          <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: "Manrope_400Regular" }]}>
+            This prescription may not have been issued yet or has been removed. Contact your doctor for details.
+          </Text>
+          <Pressable style={[styles.backBtnLarge, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
+            <Text style={[styles.backBtnText, { fontFamily: "Manrope_700Bold" }]}>Go Back</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   const issueDate = new Date(rx.issuedAt).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" });
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, {
-        paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) + 16,
-        backgroundColor: colors.background,
-      }]}>
-        <Pressable style={[styles.backBtn, { backgroundColor: colors.surfaceContainer }]} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={20} color={colors.onSurface} />
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.headerLabel, { color: colors.mutedForeground, fontFamily: "Manrope_500Medium" }]}>TELEMEDICINE</Text>
-          <Text style={[styles.headerTitle, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>Prescription</Text>
-        </View>
-        <View style={[styles.rxBadge, { backgroundColor: "#E8F5E9" }]}>
-          <Text style={[styles.rxBadgeText, { color: colors.primary, fontFamily: "Epilogue_700Bold" }]}>Rx</Text>
-        </View>
-      </View>
-
+      {header}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, {
@@ -118,42 +121,44 @@ export default function PrescriptionScreen() {
           </Text>
         </View>
 
-        <View style={[styles.section, { backgroundColor: colors.card }]}>
-          <View style={styles.sectionHeader}>
-            <Feather name="package" size={16} color={colors.primary} />
-            <Text style={[styles.sectionTitle, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>
-              Medications ({rx.medications.length})
-            </Text>
-          </View>
-          <View style={{ gap: 14 }}>
-            {rx.medications.map((med, i) => (
-              <View key={i} style={[styles.medCard, { backgroundColor: colors.surfaceContainerLow }]}>
-                <View style={styles.medTop}>
-                  <View style={[styles.medNum, { backgroundColor: colors.primaryContainer }]}>
-                    <Text style={[styles.medNumText, { fontFamily: "Manrope_700Bold", color: "#fff" }]}>{i + 1}</Text>
+        {rx.medications.length > 0 && (
+          <View style={[styles.section, { backgroundColor: colors.card }]}>
+            <View style={styles.sectionHeader}>
+              <Feather name="package" size={16} color={colors.primary} />
+              <Text style={[styles.sectionTitle, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>
+                Medications ({rx.medications.length})
+              </Text>
+            </View>
+            <View style={{ gap: 14 }}>
+              {rx.medications.map((med, i) => (
+                <View key={i} style={[styles.medCard, { backgroundColor: colors.surfaceContainerLow }]}>
+                  <View style={styles.medTop}>
+                    <View style={[styles.medNum, { backgroundColor: colors.primaryContainer }]}>
+                      <Text style={[styles.medNumText, { fontFamily: "Manrope_700Bold", color: "#fff" }]}>{i + 1}</Text>
+                    </View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={[styles.medName, { color: colors.onSurface, fontFamily: "Manrope_700Bold" }]}>{med.name}</Text>
+                      <Text style={[styles.medDosage, { color: colors.primary, fontFamily: "Manrope_600SemiBold" }]}>
+                        {med.dosage} · {med.frequency}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={[styles.medName, { color: colors.onSurface, fontFamily: "Manrope_700Bold" }]}>{med.name}</Text>
-                    <Text style={[styles.medDosage, { color: colors.primary, fontFamily: "Manrope_600SemiBold" }]}>
-                      {med.dosage} · {med.frequency}
-                    </Text>
+                  <View style={[styles.medDetail, { backgroundColor: colors.surfaceContainer }]}>
+                    <View style={styles.medRow}>
+                      <Text style={[styles.medRowLabel, { color: colors.mutedForeground, fontFamily: "Manrope_500Medium" }]}>Duration</Text>
+                      <Text style={[styles.medRowValue, { color: colors.onSurface, fontFamily: "Manrope_400Regular" }]}>{med.duration}</Text>
+                    </View>
+                    <View style={[styles.medDivider, { backgroundColor: colors.surfaceContainerHigh }]} />
+                    <View style={styles.medRow}>
+                      <Text style={[styles.medRowLabel, { color: colors.mutedForeground, fontFamily: "Manrope_500Medium" }]}>Instructions</Text>
+                      <Text style={[styles.medRowValue, { color: colors.onSurface, fontFamily: "Manrope_400Regular", flex: 1, textAlign: "right" }]}>{med.instructions}</Text>
+                    </View>
                   </View>
                 </View>
-                <View style={[styles.medDetail, { backgroundColor: colors.surfaceContainer }]}>
-                  <View style={styles.medRow}>
-                    <Text style={[styles.medRowLabel, { color: colors.mutedForeground, fontFamily: "Manrope_500Medium" }]}>Duration</Text>
-                    <Text style={[styles.medRowValue, { color: colors.onSurface, fontFamily: "Manrope_400Regular" }]}>{med.duration}</Text>
-                  </View>
-                  <View style={[styles.medDivider, { backgroundColor: colors.surfaceContainerHigh }]} />
-                  <View style={styles.medRow}>
-                    <Text style={[styles.medRowLabel, { color: colors.mutedForeground, fontFamily: "Manrope_500Medium" }]}>Instructions</Text>
-                    <Text style={[styles.medRowValue, { color: colors.onSurface, fontFamily: "Manrope_400Regular", flex: 1, textAlign: "right" }]}>{med.instructions}</Text>
-                  </View>
-                </View>
-              </View>
-            ))}
+              ))}
+            </View>
           </View>
-        </View>
+        )}
 
         {rx.labTests.length > 0 && (
           <View style={[styles.section, { backgroundColor: colors.card }]}>
@@ -180,7 +185,7 @@ export default function PrescriptionScreen() {
           <Text style={[styles.followUp, { color: colors.onSurface, fontFamily: "Manrope_600SemiBold" }]}>{rx.followUpDate}</Text>
         </View>
 
-        {rx.notes && (
+        {!!rx.notes && (
           <View style={[styles.section, { backgroundColor: colors.card }]}>
             <View style={styles.sectionHeader}>
               <Feather name="message-square" size={16} color={colors.primary} />
@@ -209,6 +214,13 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 24 },
   rxBadge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 100, marginTop: 4 },
   rxBadgeText: { fontSize: 16 },
+  centerState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32, gap: 16 },
+  centerText: { fontSize: 14 },
+  emptyIcon: { width: 88, height: 88, borderRadius: 44, alignItems: "center", justifyContent: "center" },
+  emptyTitle: { fontSize: 22, textAlign: "center" },
+  emptyText: { fontSize: 14, lineHeight: 21, textAlign: "center" },
+  backBtnLarge: { paddingHorizontal: 32, paddingVertical: 13, borderRadius: 100, marginTop: 8 },
+  backBtnText: { color: "#fff", fontSize: 15 },
   scroll: { paddingHorizontal: 20, paddingTop: 4, gap: 14 },
   rxHeader: { borderRadius: 20, padding: 20, gap: 16 },
   rxHeaderTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
