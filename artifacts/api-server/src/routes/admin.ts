@@ -1,25 +1,72 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { broadcastOrderUpdate } from "./events";
+import { broadcastOrderUpdate } from "./events.js";
 import { supabase } from "../lib/supabase.js";
+import { hashAdminPassword } from "../lib/seed.js";
 
 const router = Router();
 
-const ADMIN_USERNAME = "admin";
-const ADMIN_PASSWORD = "fittrac2026";
-const activeSessions = new Set<string>();
+const SESSION_TTL_DAYS = 1;
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 function generateToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
+function expiresAt(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + SESSION_TTL_DAYS);
+  return d.toISOString();
+}
+
+interface CachedAdminSession {
+  adminId: string;
+  username: string;
+  displayName: string;
+  cachedAt: number;
+}
+
+const adminSessionCache = new Map<string, CachedAdminSession>();
+
+async function getAdminSession(token: string): Promise<CachedAdminSession | null> {
+  const cached = adminSessionCache.get(token);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) return cached;
+
+  if (!supabase) return null;
+
+  const { data } = await supabase
+    .from("admin_sessions")
+    .select("admin_id, username, admin_users(display_name)")
+    .eq("token", token)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+
+  if (!data) {
+    adminSessionCache.delete(token);
+    return null;
+  }
+
+  const session: CachedAdminSession = {
+    adminId: data.admin_id,
+    username: data.username,
+    displayName: (data as any).admin_users?.display_name ?? "Administrator",
+    cachedAt: Date.now(),
+  };
+  adminSessionCache.set(token, session);
+  return session;
+}
+
 function authMiddleware(req: any, res: any, next: any) {
   const auth = req.headers.authorization ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (!token || !activeSessions.has(token)) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  next();
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+  getAdminSession(token).then((session) => {
+    if (!session) return res.status(401).json({ error: "Unauthorized" });
+    req.adminSession = session;
+    req.adminToken = token;
+    next();
+  }).catch(() => res.status(401).json({ error: "Unauthorized" }));
 }
 
 const FALLBACK_MENU = [
@@ -36,35 +83,70 @@ const FALLBACK_MENU = [
 
 function mapMealItem(row: any) {
   return {
-    id: row.id,
-    name: row.name,
-    price: row.price,
-    calories: row.calories ?? 0,
-    mealType: row.meal_type ?? row.mealType,
-    conditions: row.conditions ?? [],
+    id: row.id, name: row.name, price: row.price, calories: row.calories ?? 0,
+    mealType: row.meal_type ?? row.mealType, conditions: row.conditions ?? [],
     glycemicIndex: row.glycemic_index ?? row.glycemicIndex ?? "Low",
     sodiumLevel: row.sodium_level ?? row.sodiumLevel ?? "Low",
-    description: row.description ?? "",
-    imageUrl: row.image_url ?? row.imageUrl ?? null,
-    isAvailable: row.is_available ?? row.isAvailable ?? true,
-    orders: row.orders ?? 0,
+    description: row.description ?? "", imageUrl: row.image_url ?? row.imageUrl ?? null,
+    isAvailable: row.is_available ?? row.isAvailable ?? true, orders: row.orders ?? 0,
   };
 }
 
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-    const token = generateToken();
-    activeSessions.add(token);
-    return res.json({ token, username: "Administrator", role: "admin" });
+  if (!username || !password) return res.status(400).json({ error: "username and password required" });
+
+  try {
+    const hash = hashAdminPassword(password);
+
+    if (supabase) {
+      const { data: admin } = await supabase
+        .from("admin_users")
+        .select("id, username, display_name, role")
+        .eq("username", username)
+        .eq("password_hash", hash)
+        .maybeSingle();
+
+      if (!admin) return res.status(401).json({ error: "Invalid credentials" });
+
+      const token = generateToken();
+      await supabase.from("admin_sessions").insert({
+        token,
+        admin_id: admin.id,
+        username: admin.username,
+        expires_at: expiresAt(),
+      });
+
+      adminSessionCache.set(token, {
+        adminId: admin.id,
+        username: admin.username,
+        displayName: admin.display_name,
+        cachedAt: Date.now(),
+      });
+
+      return res.json({ token, username: admin.display_name, role: admin.role });
+    }
+
+    const envUser = process.env.ADMIN_USERNAME ?? "admin";
+    const envPass = process.env.ADMIN_PASSWORD ?? "fittrac2026";
+    if (username === envUser && hashAdminPassword(password) === hashAdminPassword(envPass)) {
+      const token = generateToken();
+      adminSessionCache.set(token, { adminId: "adm-fallback", username, displayName: "Administrator", cachedAt: Date.now() });
+      return res.json({ token, username: "Administrator", role: "admin" });
+    }
+
+    return res.status(401).json({ error: "Invalid credentials" });
+  } catch (err: any) {
+    req.log?.error(err, "admin login error");
+    return res.status(500).json({ error: "Login failed" });
   }
-  return res.status(401).json({ error: "Invalid credentials" });
 });
 
-router.post("/logout", authMiddleware, (req, res) => {
-  const auth = req.headers.authorization ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  activeSessions.delete(token);
+router.post("/logout", authMiddleware, async (req: any, res) => {
+  adminSessionCache.delete(req.adminToken);
+  if (supabase) {
+    await supabase.from("admin_sessions").delete().eq("token", req.adminToken);
+  }
   return res.json({ success: true });
 });
 
@@ -79,20 +161,12 @@ router.get("/stats", authMiddleware, async (_req, res) => {
     const todayRevenue = todayOrders.reduce((s: number, o: any) => s + (o.total ?? 0), 0);
     const statusBreakdown: Record<string, number> = {};
     for (const o of all) statusBreakdown[o.status] = (statusBreakdown[o.status] ?? 0) + 1;
-
     const { data: menuItems } = await supabase.from("menu_items").select("id, name").eq("is_available", true);
     const totalMeals = (menuItems ?? FALLBACK_MENU).length;
     const topMeal = (menuItems ?? FALLBACK_MENU)[0]?.name ?? "Egusi Soup";
-
     return res.json({
-      totalOrders: all.length,
-      todayOrders: todayOrders.length,
-      totalRevenue,
-      todayRevenue,
-      totalMeals,
-      conditionBreakdown: {},
-      statusBreakdown,
-      topMeal,
+      totalOrders: all.length, todayOrders: todayOrders.length, totalRevenue, todayRevenue,
+      totalMeals, conditionBreakdown: {}, statusBreakdown, topMeal,
       avgOrderValue: all.length > 0 ? Math.round(totalRevenue / all.length) : 0,
     });
   } catch (err: any) {
@@ -104,27 +178,17 @@ router.get("/orders", authMiddleware, async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Database not configured" });
   try {
     const { status, date } = req.query;
-    let query = supabase
-      .from("orders")
-      .select("*, users(name, email, conditions)")
-      .order("created_at", { ascending: false });
+    let query = supabase.from("orders").select("*, users(name, email, conditions)").order("created_at", { ascending: false });
     if (status && typeof status === "string") query = query.eq("status", status);
     if (date && typeof date === "string") query = query.gte("created_at", `${date}T00:00:00`).lte("created_at", `${date}T23:59:59`);
     const { data, error } = await query;
     if (error) throw error;
-    const mapped = (data ?? []).map((o: any) => ({
-      id: o.id,
-      customer: o.users?.name ?? o.user_id ?? "Unknown",
-      total: o.total,
-      status: o.status,
-      fulfillment: o.fulfillment,
-      items: Array.isArray(o.items) ? o.items.map((i: any) => i.meal?.name ?? i.name ?? "Item") : [],
-      date: (o.created_at ?? "").split("T")[0],
-      condition: (o.users?.conditions ?? [])[0] ?? "general",
-      address: o.address ?? "",
-      paymentMethod: o.payment_method ?? "",
-    }));
-    return res.json(mapped);
+    return res.json((data ?? []).map((o: any) => ({
+      id: o.id, customer: o.users?.name ?? o.user_id ?? "Unknown", total: o.total, status: o.status,
+      fulfillment: o.fulfillment, items: Array.isArray(o.items) ? o.items.map((i: any) => i.meal?.name ?? i.name ?? "Item") : [],
+      date: (o.created_at ?? "").split("T")[0], condition: (o.users?.conditions ?? [])[0] ?? "general",
+      address: o.address ?? "", paymentMethod: o.payment_method ?? "",
+    })));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -150,11 +214,18 @@ router.patch("/orders/:id/status", authMiddleware, async (req, res) => {
 router.get("/meals", authMiddleware, async (_req, res) => {
   if (!supabase) return res.json(FALLBACK_MENU);
   try {
-    const { data, error } = await supabase
-      .from("menu_items")
-      .select("*")
-      .order("display_order", { ascending: true })
-      .order("created_at", { ascending: true });
+    const { data, error } = await supabase.from("menu_items").select("*").order("display_order", { ascending: true }).order("created_at", { ascending: true });
+    if (error) throw error;
+    return res.json((data ?? FALLBACK_MENU).map(mapMealItem));
+  } catch {
+    return res.json(FALLBACK_MENU);
+  }
+});
+
+router.get("/menu-items", authMiddleware, async (_req, res) => {
+  if (!supabase) return res.json(FALLBACK_MENU);
+  try {
+    const { data, error } = await supabase.from("menu_items").select("*").order("display_order", { ascending: true }).order("created_at", { ascending: true });
     if (error) throw error;
     return res.json((data ?? FALLBACK_MENU).map(mapMealItem));
   } catch {
@@ -168,24 +239,12 @@ router.post("/menu-items", authMiddleware, async (req, res) => {
     const { name, price, calories, mealType, conditions, glycemicIndex, sodiumLevel, description, imageUrl } = req.body;
     if (!name || !price || !mealType) return res.status(400).json({ error: "name, price, and mealType are required" });
     const id = `m-${Date.now()}`;
-    const { data, error } = await supabase
-      .from("menu_items")
-      .insert({
-        id,
-        name,
-        price: Number(price),
-        calories: Number(calories ?? 0),
-        meal_type: mealType,
-        conditions: conditions ?? [],
-        glycemic_index: glycemicIndex ?? "Low",
-        sodium_level: sodiumLevel ?? "Low",
-        description: description ?? "",
-        image_url: imageUrl ?? null,
-        is_available: true,
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+    const { data, error } = await supabase.from("menu_items").insert({
+      id, name, price: Number(price), calories: Number(calories ?? 0), meal_type: mealType,
+      conditions: conditions ?? [], glycemic_index: glycemicIndex ?? "Low", sodium_level: sodiumLevel ?? "Low",
+      description: description ?? "", image_url: imageUrl ?? null, is_available: true,
+      updated_at: new Date().toISOString(),
+    }).select().single();
     if (error) throw error;
     return res.status(201).json(mapMealItem(data));
   } catch (err: any) {
@@ -209,12 +268,7 @@ router.put("/menu-items/:id", authMiddleware, async (req, res) => {
     if (description !== undefined) updates.description = description;
     if (imageUrl !== undefined) updates.image_url = imageUrl;
     if (isAvailable !== undefined) updates.is_available = isAvailable;
-    const { data, error } = await supabase
-      .from("menu_items")
-      .update(updates)
-      .eq("id", id)
-      .select()
-      .single();
+    const { data, error } = await supabase.from("menu_items").update(updates).eq("id", id).select().single();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: "Item not found" });
     return res.json(mapMealItem(data));
@@ -243,9 +297,7 @@ router.post("/upload-image", authMiddleware, async (req, res) => {
     const buffer = Buffer.from(base64, "base64");
     await supabase.storage.createBucket("meal-images", { public: true }).catch(() => {});
     const safeName = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    const { error } = await supabase.storage
-      .from("meal-images")
-      .upload(safeName, buffer, { contentType: contentType ?? "image/jpeg", upsert: true });
+    const { error } = await supabase.storage.from("meal-images").upload(safeName, buffer, { contentType: contentType ?? "image/jpeg", upsert: true });
     if (error) throw error;
     const { data: urlData } = supabase.storage.from("meal-images").getPublicUrl(safeName);
     return res.json({ url: urlData.publicUrl });
@@ -256,16 +308,7 @@ router.post("/upload-image", authMiddleware, async (req, res) => {
 
 router.get("/settings", authMiddleware, async (_req, res) => {
   if (!supabase) {
-    return res.json({
-      app_tagline: "The Earth's Apothecary",
-      hero_title: "Nigerian Wellness Cuisine",
-      hero_subtitle: "Food as Medicine, Culture as Cure",
-      primary_color: "#154212",
-      secondary_color: "#8b500a",
-      logo_url: "",
-      banner_url: "",
-      announcement: "",
-    });
+    return res.json({ app_tagline: "The Earth's Apothecary", hero_title: "Nigerian Wellness Cuisine", hero_subtitle: "Food as Medicine, Culture as Cure", primary_color: "#154212", secondary_color: "#8b500a", logo_url: "", banner_url: "", announcement: "" });
   }
   try {
     const { data, error } = await supabase.from("app_settings").select("key, value");
@@ -282,11 +325,7 @@ router.put("/settings", authMiddleware, async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Database not configured" });
   try {
     const entries = Object.entries(req.body as Record<string, string>);
-    const upserts = entries.map(([key, value]) => ({
-      key,
-      value: String(value),
-      updated_at: new Date().toISOString(),
-    }));
+    const upserts = entries.map(([key, value]) => ({ key, value: String(value), updated_at: new Date().toISOString() }));
     const { error } = await supabase.from("app_settings").upsert(upserts, { onConflict: "key" });
     if (error) throw error;
     return res.json({ success: true });
@@ -315,10 +354,8 @@ router.get("/clinical-staff", authMiddleware, async (_req, res) => {
     }
     return res.json({
       staff: (staff ?? []).map((s: any) => ({
-        id: s.id, name: s.name, title: s.title, role: s.role,
-        specialization: s.specialization, email: s.email, badge: s.badge,
-        sessions: consultMap[s.id] ?? 0,
-        patients: patMap[s.id] ?? 0,
+        id: s.id, name: s.name, title: s.title, role: s.role, specialization: s.specialization,
+        email: s.email, badge: s.badge, sessions: consultMap[s.id] ?? 0, patients: patMap[s.id] ?? 0,
       })),
     });
   } catch (err: any) {
@@ -331,11 +368,7 @@ router.get("/consultations", authMiddleware, async (_req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
     const { data: consults, error } = await supabase
-      .from("consultations")
-      .select("*, patients(id, name)")
-      .gte("date", today)
-      .order("date", { ascending: true })
-      .limit(20);
+      .from("consultations").select("*, patients(id, name)").gte("date", today).order("date", { ascending: true }).limit(20);
     if (error) throw error;
     const staffIds = [...new Set((consults ?? []).flatMap((c: any) => [c.doctor_id, c.nutritionist_id].filter(Boolean)))];
     const { data: staffData } = staffIds.length
@@ -344,20 +377,13 @@ router.get("/consultations", authMiddleware, async (_req, res) => {
     const staffMap = new Map((staffData ?? []).map((s: any) => [s.id, s]));
     return res.json({
       consultations: (consults ?? []).map((c: any) => ({
-        id: c.id,
-        patientId: c.patient_id,
-        patientName: c.patients?.name ?? "Unknown",
-        doctorId: c.doctor_id ?? null,
-        nutritionistId: c.nutritionist_id ?? null,
+        id: c.id, patientId: c.patient_id, patientName: c.patients?.name ?? "Unknown",
+        doctorId: c.doctor_id ?? null, nutritionistId: c.nutritionist_id ?? null,
         staffId: c.doctor_id ?? c.nutritionist_id ?? null,
         staffName: (staffMap.get(c.doctor_id) ?? staffMap.get(c.nutritionist_id))?.name ?? "Unknown",
         staffRole: c.doctor_id ? "doctor" : "nutritionist",
-        date: c.date,
-        time: c.scheduled_time,
-        duration: c.duration,
-        status: c.status,
-        type: c.type,
-        chiefComplaint: c.chief_complaint,
+        date: c.date, time: c.scheduled_time, duration: c.duration,
+        status: c.status, type: c.type, chiefComplaint: c.chief_complaint,
       })),
     });
   } catch (err: any) {
@@ -368,18 +394,28 @@ router.get("/consultations", authMiddleware, async (_req, res) => {
 router.post("/test-requests", authMiddleware, async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Database not configured" });
   try {
-    const { patientId, tests } = req.body as { patientId: string; tests: string[] };
-    const date = new Date().toISOString().slice(0, 10);
-    const inserts = tests.map((testName: string, i: number) => ({
-      id: `tr-${Date.now()}-${i}`,
-      patient_id: patientId,
-      test_name: testName,
-      status: "pending",
-      date,
+    const { patientId, consultationId, doctorName, tests } = req.body as {
+      patientId: string; consultationId?: string; doctorName?: string; tests: string[];
+    };
+    const now = new Date().toISOString();
+    const date = now.slice(0, 10);
+    const labInserts = tests.map((testName: string, i: number) => ({
+      id: `tr-${Date.now()}-${i}`, patient_id: patientId, test_name: testName, status: "pending", date,
     }));
-    const { error } = await supabase.from("lab_results").insert(inserts);
-    if (error) throw error;
-    return res.status(201).json({ success: true, count: inserts.length });
+    const { error: labErr } = await supabase.from("lab_results").insert(labInserts);
+    if (labErr) throw labErr;
+    if (consultationId) {
+      const resolvedTests = tests.map((t) => ({ name: t, instructions: "Follow standard preparation guidelines." }));
+      await supabase.from("clinical_test_requests").insert({
+        id: `ctr-${Date.now()}`,
+        consultation_id: consultationId,
+        doctor_name: doctorName ?? null,
+        requested_at: now,
+        tests: resolvedTests,
+        status: "pending",
+      });
+    }
+    return res.status(201).json({ success: true, count: labInserts.length });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -389,20 +425,27 @@ router.post("/prescriptions", authMiddleware, async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Database not configured" });
   try {
     const id = `rx-${Date.now()}`;
-    const date = new Date().toISOString().slice(0, 10);
-    const { data, error } = await supabase
-      .from("prescriptions")
-      .insert({
-        id, date,
-        patient_id: req.body.patientId,
-        doctor_id: req.body.doctorId ?? null,
-        diagnosis: req.body.diagnosis,
-        medications: req.body.medications ?? [],
-        notes: req.body.notes ?? null,
-        valid_until: req.body.validUntil ?? null,
-      })
-      .select()
-      .single();
+    const issuedAt = new Date().toISOString();
+    const {
+      patientId, consultationId, doctorId, doctorName, doctorType,
+      diagnosis, medications, labTests, notes, validUntil, followUpDate,
+    } = req.body;
+    const { data, error } = await supabase.from("prescriptions").insert({
+      id,
+      date: issuedAt.slice(0, 10),
+      issued_at: issuedAt,
+      patient_id: patientId ?? null,
+      consultation_id: consultationId ?? null,
+      doctor_id: doctorId ?? null,
+      doctor_name: doctorName ?? null,
+      doctor_type: doctorType ?? null,
+      diagnosis,
+      medications: medications ?? [],
+      lab_tests: labTests ?? [],
+      notes: notes ?? null,
+      follow_up_date: followUpDate ?? validUntil ?? null,
+      valid_until: validUntil ?? null,
+    }).select().single();
     if (error) throw error;
     return res.status(201).json({ id: data.id });
   } catch (err: any) {
@@ -427,18 +470,8 @@ router.get("/analytics", authMiddleware, async (_req, res) => {
     });
     const avgOrder = all.length > 0 ? Math.round(all.reduce((s: number, o: any) => s + (o.total ?? 0), 0) / all.length) : 7200;
     const weeklyRevenue = weeklyOrders.map((count) => count * avgOrder);
-    const topItems = (menuItems ?? FALLBACK_MENU.slice(0, 5)).map((m: any) => ({
-      name: m.name,
-      orders: 0,
-      revenue: 0,
-    }));
-    return res.json({
-      weeklyOrders,
-      weeklyRevenue,
-      conditionTrend: [],
-      topMeals: topItems,
-      totalOrders: all.length,
-    });
+    const topItems = (menuItems ?? FALLBACK_MENU.slice(0, 5)).map((m: any) => ({ name: m.name, orders: 0, revenue: 0 }));
+    return res.json({ weeklyOrders, weeklyRevenue, conditionTrend: [], topMeals: topItems, totalOrders: all.length });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

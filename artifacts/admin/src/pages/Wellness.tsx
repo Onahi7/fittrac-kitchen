@@ -72,7 +72,12 @@ function ConsultationRoom({
       const res = await apiFetch("/api/admin/test-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId: session.patientId, tests: selectedTests }),
+        body: JSON.stringify({
+          patientId: session.patientId,
+          consultationId: session.id,
+          doctorName: session.staffName,
+          tests: selectedTests,
+        }),
       });
       if (!res.ok) throw new Error("Failed to send test requests");
       setTestsSent(true);
@@ -93,10 +98,15 @@ function ConsultationRoom({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           patientId: session.patientId,
+          consultationId: session.id,
           doctorId: session.doctorId,
+          doctorName: session.staffName,
+          doctorType: session.staffRole === "doctor" ? "Medical Doctor" : "Nutritionist",
           diagnosis,
           medications: medications.filter((m) => m.name),
+          labTests: selectedTests,
           notes: doctorNotes,
+          followUpDate: followUp || null,
           validUntil: followUp || null,
         }),
       });

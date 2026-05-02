@@ -1,5 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
+import { supabase } from "../lib/supabase.js";
 
 const router = Router();
 
@@ -16,55 +17,91 @@ const COMMON_TESTS = [
   { name: "Electrolytes (Na, K, Cl)", instructions: "No special preparation needed." },
 ];
 
-const PRESCRIPTIONS: Record<string, any> = {};
-const TEST_REQUESTS: Record<string, any> = {};
+function genId(prefix: string): string {
+  return `${prefix}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+}
 
 router.get("/tests", (_req, res) => {
   return res.json(COMMON_TESTS);
 });
 
-router.post("/test-requests", (req, res) => {
+router.post("/test-requests", async (req, res) => {
   const { consultationId, tests, doctorName } = req.body;
-  const id = `TR-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
-  const request = {
-    id,
-    consultationId,
-    doctorName,
-    requestedAt: new Date().toISOString(),
-    tests: tests.map((t: string) => {
-      const test = COMMON_TESTS.find((ct) => ct.name === t);
-      return test ?? { name: t, instructions: "Follow standard preparation guidelines." };
-    }),
-    status: "pending",
-  };
-  TEST_REQUESTS[id] = request;
+  const id = genId("TR");
+  const requestedAt = new Date().toISOString();
+
+  const resolvedTests = (tests as string[]).map((t: string) => {
+    const found = COMMON_TESTS.find((ct) => ct.name === t);
+    return found ?? { name: t, instructions: "Follow standard preparation guidelines." };
+  });
+
+  const request = { id, consultationId, doctorName, requestedAt, tests: resolvedTests, status: "pending" };
+
+  if (supabase) {
+    await supabase.from("clinical_test_requests").insert({
+      id,
+      consultation_id: consultationId ?? null,
+      doctor_name: doctorName ?? null,
+      requested_at: requestedAt,
+      tests: resolvedTests,
+      status: "pending",
+    });
+  }
+
   return res.json(request);
 });
 
-router.get("/test-requests/:id", (req, res) => {
+router.get("/test-requests/:id", async (req, res) => {
   const { id } = req.params;
-  const request = TEST_REQUESTS[id];
-  if (!request) return res.status(404).json({ error: "Not found" });
-  return res.json(request);
+
+  if (supabase) {
+    const { data } = await supabase.from("clinical_test_requests").select("*").eq("id", id).maybeSingle();
+    if (data) return res.json(data);
+  }
+
+  return res.status(404).json({ error: "Not found" });
 });
 
-router.get("/test-requests/consultation/:consultationId", (req, res) => {
+router.get("/test-requests/consultation/:consultationId", async (req, res) => {
   const { consultationId } = req.params;
-  const requests = Object.values(TEST_REQUESTS).filter((r: any) => r.consultationId === consultationId);
-  return res.json(requests);
+
+  if (supabase) {
+    const { data } = await supabase
+      .from("clinical_test_requests")
+      .select("*")
+      .eq("consultation_id", consultationId);
+    return res.json(data ?? []);
+  }
+
+  return res.json([]);
 });
 
-router.patch("/test-requests/:id/status", (req, res) => {
+router.patch("/test-requests/:id/status", async (req, res) => {
   const { id } = req.params;
   const { status, resultImageUri, doctorComment } = req.body;
-  if (!TEST_REQUESTS[id]) return res.status(404).json({ error: "Not found" });
-  TEST_REQUESTS[id] = { ...TEST_REQUESTS[id], status, resultImageUri, doctorComment };
-  return res.json(TEST_REQUESTS[id]);
+
+  if (supabase) {
+    const updates: any = { status };
+    if (resultImageUri) updates.result_image_uri = resultImageUri;
+    if (doctorComment) updates.doctor_comment = doctorComment;
+
+    const { data, error } = await supabase
+      .from("clinical_test_requests")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .maybeSingle();
+
+    if (error || !data) return res.status(404).json({ error: "Not found" });
+    return res.json(data);
+  }
+
+  return res.status(503).json({ error: "Database not configured" });
 });
 
-router.post("/test-results", (req, res) => {
+router.post("/test-results", async (req, res) => {
   const { consultationId, uploads } = req.body ?? {};
-  const id = `RES-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+  const id = genId("RES");
   const result = {
     id,
     consultationId: consultationId ?? null,
@@ -75,36 +112,88 @@ router.post("/test-results", (req, res) => {
   return res.status(201).json(result);
 });
 
-router.post("/prescriptions", (req, res) => {
+router.post("/prescriptions", async (req, res) => {
   const { consultationId, doctorName, doctorType, diagnosis, medications, labTests, followUpDate, notes } = req.body;
-  const id = `RX-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+  const id = genId("RX");
+  const issuedAt = new Date().toISOString();
+
   const prescription = {
-    id,
-    consultationId,
-    doctorName,
-    doctorType,
-    issuedAt: new Date().toISOString(),
+    id, consultationId, doctorName, doctorType, issuedAt,
     diagnosis,
     medications: medications ?? [],
     labTests: labTests ?? [],
     followUpDate,
     notes: notes ?? "",
   };
-  PRESCRIPTIONS[id] = prescription;
+
+  if (supabase) {
+    await supabase.from("prescriptions").insert({
+      id,
+      consultation_id: consultationId ?? null,
+      doctor_name: doctorName ?? null,
+      doctor_type: doctorType ?? null,
+      issued_at: issuedAt,
+      diagnosis,
+      medications: medications ?? [],
+      lab_tests: labTests ?? [],
+      follow_up_date: followUpDate ?? null,
+      notes: notes ?? null,
+      date: issuedAt.slice(0, 10),
+    });
+  }
+
   return res.json(prescription);
 });
 
-router.get("/prescriptions/:id", (req, res) => {
+router.get("/prescriptions/:id", async (req, res) => {
   const { id } = req.params;
-  const rx = PRESCRIPTIONS[id];
-  if (!rx) return res.status(404).json({ error: "Not found" });
-  return res.json(rx);
+
+  if (supabase) {
+    const { data } = await supabase.from("prescriptions").select("*").eq("id", id).maybeSingle();
+    if (data) {
+      return res.json({
+        id: data.id,
+        consultationId: data.consultation_id,
+        doctorName: data.doctor_name,
+        doctorType: data.doctor_type,
+        issuedAt: data.issued_at ?? data.created_at,
+        diagnosis: data.diagnosis,
+        medications: data.medications ?? [],
+        labTests: data.lab_tests ?? [],
+        followUpDate: data.follow_up_date,
+        notes: data.notes ?? "",
+      });
+    }
+  }
+
+  return res.status(404).json({ error: "Not found" });
 });
 
-router.get("/prescriptions/consultation/:consultationId", (req, res) => {
+router.get("/prescriptions/consultation/:consultationId", async (req, res) => {
   const { consultationId } = req.params;
-  const rxs = Object.values(PRESCRIPTIONS).filter((r: any) => r.consultationId === consultationId);
-  return res.json(rxs);
+
+  if (supabase) {
+    const { data } = await supabase
+      .from("prescriptions")
+      .select("*")
+      .eq("consultation_id", consultationId);
+
+    const mapped = (data ?? []).map((r: any) => ({
+      id: r.id,
+      consultationId: r.consultation_id,
+      doctorName: r.doctor_name,
+      doctorType: r.doctor_type,
+      issuedAt: r.issued_at ?? r.created_at,
+      diagnosis: r.diagnosis,
+      medications: r.medications ?? [],
+      labTests: r.lab_tests ?? [],
+      followUpDate: r.follow_up_date,
+      notes: r.notes ?? "",
+    }));
+    return res.json(mapped);
+  }
+
+  return res.json([]);
 });
 
 export default router;

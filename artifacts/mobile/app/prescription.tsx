@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -13,15 +13,32 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useApp } from "@/context/AppContext";
+import type { Prescription } from "@/constants/types";
 
 export default function PrescriptionScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { prescriptionId } = useLocalSearchParams<{ prescriptionId: string }>();
-  const { prescriptions, isLoading } = useApp();
+  const { prescriptions } = useApp();
 
-  const rx = prescriptions.find((p) => p.id === prescriptionId) ?? null;
+  const localRx = prescriptions.find((p) => p.id === prescriptionId) ?? null;
+  const [rx, setRx] = useState<Prescription | null>(localRx);
+  const [fetching, setFetching] = useState(!localRx && !!prescriptionId);
+  const [fetchError, setFetchError] = useState("");
+
+  useEffect(() => {
+    if (localRx) { setRx(localRx); return; }
+    if (!prescriptionId) return;
+    setFetching(true);
+    fetch(`/api/clinical/prescriptions/${prescriptionId}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data: Prescription) => setRx(data))
+      .catch(() => setFetchError("Could not load prescription."))
+      .finally(() => setFetching(false));
+  }, [prescriptionId]);
+
+  const isLoading = fetching;
 
   const header = (
     <View style={[styles.header, {
@@ -63,7 +80,7 @@ export default function PrescriptionScreen() {
           </View>
           <Text style={[styles.emptyTitle, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>No Prescription Found</Text>
           <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: "Manrope_400Regular" }]}>
-            This prescription may not have been issued yet or has been removed. Contact your doctor for details.
+            {fetchError || "This prescription may not have been issued yet or has been removed. Contact your doctor for details."}
           </Text>
           <Pressable style={[styles.backBtnLarge, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
             <Text style={[styles.backBtnText, { fontFamily: "Manrope_700Bold" }]}>Go Back</Text>

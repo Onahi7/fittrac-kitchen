@@ -4,6 +4,9 @@ import { supabase } from "../lib/supabase.js";
 
 const router = Router();
 
+const SESSION_TTL_DAYS = 30;
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
 function hashPassword(password: string): string {
   return crypto.createHash("sha256").update(password + "fittrac_salt_2026").digest("hex");
 }
@@ -12,18 +15,77 @@ function generateToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
-const activeSessions = new Map<string, { userId: string; email: string; name: string }>();
-
-export function getUserFromToken(token: string) {
-  return activeSessions.get(token) ?? null;
+function expiresAt(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + SESSION_TTL_DAYS);
+  return d.toISOString();
 }
 
-export function authMiddleware(req: any, res: any, next: any) {
+interface CachedSession {
+  userId: string;
+  email: string;
+  name: string;
+  cachedAt: number;
+}
+
+const sessionCache = new Map<string, CachedSession>();
+
+async function getSession(token: string): Promise<{ userId: string; email: string; name: string } | null> {
+  const cached = sessionCache.get(token);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return { userId: cached.userId, email: cached.email, name: cached.name };
+  }
+
+  if (!supabase) return null;
+
+  const { data } = await supabase
+    .from("user_sessions")
+    .select("user_id, email, name")
+    .eq("token", token)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+
+  if (!data) {
+    sessionCache.delete(token);
+    return null;
+  }
+
+  const session = { userId: data.user_id, email: data.email, name: data.name };
+  sessionCache.set(token, { ...session, cachedAt: Date.now() });
+  return session;
+}
+
+async function createSession(token: string, userId: string, email: string, name: string): Promise<void> {
+  sessionCache.set(token, { userId, email, name, cachedAt: Date.now() });
+  if (supabase) {
+    await supabase.from("user_sessions").insert({
+      token,
+      user_id: userId,
+      email,
+      name,
+      expires_at: expiresAt(),
+    });
+  }
+}
+
+async function deleteSession(token: string): Promise<void> {
+  sessionCache.delete(token);
+  if (supabase) {
+    await supabase.from("user_sessions").delete().eq("token", token);
+  }
+}
+
+export async function getUserFromToken(token: string) {
+  return getSession(token);
+}
+
+export async function authMiddleware(req: any, res: any, next: any) {
   const auth = req.headers.authorization ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  const user = activeSessions.get(token);
-  if (!token || !user) return res.status(401).json({ error: "Unauthorized" });
-  req.user = user;
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+  const session = await getSession(token);
+  if (!session) return res.status(401).json({ error: "Unauthorized" });
+  req.user = session;
   req.userToken = token;
   next();
 }
@@ -42,28 +104,19 @@ router.post("/register", async (req, res) => {
       if (existing) return res.status(409).json({ error: "Email already registered" });
 
       const { data, error } = await supabase.from("users").insert({
-        id: userId,
-        name,
-        email,
+        id: userId, name, email,
         phone: phone ?? null,
         password_hash: hashedPw,
         conditions: conditions ?? [],
         created_at: new Date().toISOString(),
       }).select("id,name,email,phone,conditions").single();
-
       if (error) throw error;
 
       if (conditions && conditions.length > 0) {
         const patientId = `pat-${userId}`;
         await supabase.from("patients").upsert({
-          id: patientId,
-          name,
-          email,
-          phone: phone ?? null,
-          conditions,
-          primary_condition: conditions[0],
-          adherence_score: 0,
-          risk_score: 1,
+          id: patientId, name, email, phone: phone ?? null, conditions,
+          primary_condition: conditions[0], adherence_score: 0, risk_score: 1,
           created_at: new Date().toISOString(),
         }, { onConflict: "id" });
         await supabase.from("users").update({ patient_id: patientId }).eq("id", userId);
@@ -71,13 +124,13 @@ router.post("/register", async (req, res) => {
       }
 
       const token = generateToken();
-      activeSessions.set(token, { userId: data.id, email: data.email, name: data.name });
+      await createSession(token, data.id, data.email, data.name);
       return res.status(201).json({ token, user: data });
     }
 
     const token = generateToken();
     const user = { id: userId, name, email, phone: phone ?? null, conditions: conditions ?? [] };
-    activeSessions.set(token, { userId, email, name });
+    await createSession(token, userId, email, name);
     return res.status(201).json({ token, user });
   } catch (err: any) {
     req.log?.error(err, "register error");
@@ -99,12 +152,11 @@ router.post("/login", async (req, res) => {
         .eq("email", email)
         .eq("password_hash", hashedPw)
         .maybeSingle();
-
       if (error) throw error;
       if (!user) return res.status(401).json({ error: "Invalid email or password" });
 
       const token = generateToken();
-      activeSessions.set(token, { userId: user.id, email: user.email, name: user.name });
+      await createSession(token, user.id, user.email, user.name);
       return res.json({ token, user });
     }
 
@@ -133,8 +185,8 @@ router.get("/me", authMiddleware, async (req: any, res) => {
   }
 });
 
-router.post("/logout", authMiddleware, (req: any, res) => {
-  activeSessions.delete(req.userToken);
+router.post("/logout", authMiddleware, async (req: any, res) => {
+  await deleteSession(req.userToken);
   return res.json({ success: true });
 });
 
@@ -148,80 +200,23 @@ router.patch("/me", authMiddleware, async (req: any, res) => {
       if (conditions) updates.conditions = conditions;
 
       const { data, error } = await supabase
-        .from("users")
-        .update(updates)
-        .eq("id", req.user.userId)
-        .select("id,name,email,phone,conditions,patient_id")
-        .single();
+        .from("users").update(updates).eq("id", req.user.userId)
+        .select("id,name,email,phone,conditions,patient_id").single();
       if (error) throw error;
 
       if (conditions && data.patient_id) {
         await supabase.from("patients").update({ conditions, primary_condition: conditions[0] }).eq("id", data.patient_id);
       }
-
-      if (name) activeSessions.set(req.userToken, { ...req.user, name });
+      if (name) {
+        const cached = sessionCache.get(req.userToken);
+        if (cached) sessionCache.set(req.userToken, { ...cached, name });
+      }
       return res.json({ user: data });
     }
     return res.json({ user: req.user });
   } catch (err: any) {
     req.log?.error(err, "patch me error");
     return res.status(500).json({ error: "Update failed" });
-  }
-});
-
-router.post("/book-consultation", authMiddleware, async (req: any, res) => {
-  const { specialistType, specialistName, specialistId, date, time, price, notes } = req.body;
-  try {
-    if (supabase) {
-      const { data: user } = await supabase.from("users").select("patient_id,name,email,phone,conditions").eq("id", req.user.userId).single();
-
-      let patientId = user?.patient_id;
-      if (!patientId) {
-        patientId = `pat-${req.user.userId}`;
-        await supabase.from("patients").upsert({
-          id: patientId,
-          name: user?.name ?? req.user.name,
-          email: user?.email ?? req.user.email,
-          phone: user?.phone ?? null,
-          conditions: user?.conditions ?? [],
-          primary_condition: user?.conditions?.[0] ?? null,
-          adherence_score: 0,
-          risk_score: 1,
-        }, { onConflict: "id" });
-        await supabase.from("users").update({ patient_id: patientId }).eq("id", req.user.userId);
-      }
-
-      const consId = `cons-${Date.now()}`;
-      const doctorId = specialistType === "doctor" ? (specialistId ?? "doc-001") : null;
-      const nutritionistId = specialistType === "nutritionist" ? (specialistId ?? "nut-001") : null;
-
-      const { data: cons, error } = await supabase.from("consultations").insert({
-        id: consId,
-        patient_id: patientId,
-        doctor_id: doctorId,
-        nutritionist_id: nutritionistId,
-        date,
-        scheduled_time: time,
-        status: "scheduled",
-        type: "initial",
-        chief_complaint: notes ?? `${specialistType} consultation`,
-        duration: 30,
-      }).select().single();
-
-      if (error) throw error;
-      return res.status(201).json({ consultation: { id: cons.id, patientId, date, time, specialistType, specialistName, status: "upcoming", price } });
-    }
-
-    return res.status(201).json({
-      consultation: {
-        id: `CON-${Date.now().toString().slice(-4)}`,
-        patientId: `pat-${req.user.userId}`,
-        date, time, specialistType, specialistName, status: "upcoming", price,
-      },
-    });
-  } catch (err: any) {
-    req.log?.error(err, "book-consultation error");
-    return res.status(500).json({ error: "Booking failed" });
   }
 });
 
@@ -240,18 +235,15 @@ router.post("/google", async (req, res) => {
     const googleId = supaUser.id;
 
     let { data: existingUser } = await supabase
-      .from("users")
-      .select("id,name,email,phone,conditions,patient_id")
-      .eq("email", email)
-      .maybeSingle();
+      .from("users").select("id,name,email,phone,conditions,patient_id")
+      .eq("email", email).maybeSingle();
 
     if (!existingUser) {
       const userId = `usr-g-${Date.now()}`;
       const { data: newUser, error: createErr } = await supabase
         .from("users")
         .insert({ id: userId, name, email, google_id: googleId, conditions: [], created_at: new Date().toISOString() })
-        .select("id,name,email,phone,conditions,patient_id")
-        .single();
+        .select("id,name,email,phone,conditions,patient_id").single();
       if (createErr) throw createErr;
       existingUser = newUser;
     } else {
@@ -259,11 +251,52 @@ router.post("/google", async (req, res) => {
     }
 
     const token = generateToken();
-    activeSessions.set(token, { userId: existingUser.id, email: existingUser.email, name: existingUser.name });
+    await createSession(token, existingUser.id, existingUser.email, existingUser.name);
     return res.json({ token, user: existingUser });
   } catch (err: any) {
     req.log?.error(err, "google auth error");
     return res.status(500).json({ error: "Google auth failed" });
+  }
+});
+
+router.post("/book-consultation", authMiddleware, async (req: any, res) => {
+  const { specialistType, specialistName, specialistId, date, time, price, notes } = req.body;
+  try {
+    if (supabase) {
+      const { data: user } = await supabase.from("users").select("patient_id,name,email,phone,conditions").eq("id", req.user.userId).single();
+      let patientId = user?.patient_id;
+      if (!patientId) {
+        patientId = `pat-${req.user.userId}`;
+        await supabase.from("patients").upsert({
+          id: patientId, name: user?.name ?? req.user.name, email: user?.email ?? req.user.email,
+          phone: user?.phone ?? null, conditions: user?.conditions ?? [], primary_condition: user?.conditions?.[0] ?? null,
+          adherence_score: 0, risk_score: 1,
+        }, { onConflict: "id" });
+        await supabase.from("users").update({ patient_id: patientId }).eq("id", req.user.userId);
+      }
+
+      const consId = `cons-${Date.now()}`;
+      const doctorId = specialistType === "doctor" ? (specialistId ?? "doc-001") : null;
+      const nutritionistId = specialistType === "nutritionist" ? (specialistId ?? "nut-001") : null;
+
+      const { data: cons, error } = await supabase.from("consultations").insert({
+        id: consId, patient_id: patientId, doctor_id: doctorId, nutritionist_id: nutritionistId,
+        date, scheduled_time: time, status: "scheduled", type: "initial",
+        chief_complaint: notes ?? `${specialistType} consultation`, duration: 30,
+      }).select().single();
+      if (error) throw error;
+      return res.status(201).json({ consultation: { id: cons.id, patientId, date, time, specialistType, specialistName, status: "upcoming", price } });
+    }
+
+    return res.status(201).json({
+      consultation: {
+        id: `CON-${Date.now().toString().slice(-4)}`,
+        patientId: `pat-${req.user.userId}`, date, time, specialistType, specialistName, status: "upcoming", price,
+      },
+    });
+  } catch (err: any) {
+    req.log?.error(err, "book-consultation error");
+    return res.status(500).json({ error: "Booking failed" });
   }
 });
 
@@ -273,16 +306,9 @@ router.post("/orders", authMiddleware, async (req: any, res) => {
     const orderId = `VIT-${Date.now().toString().slice(-4)}`;
     if (supabase) {
       const { data, error } = await supabase.from("orders").insert({
-        id: orderId,
-        user_id: req.user.userId,
-        items,
-        fulfillment,
-        address: address ?? null,
-        total,
-        payment_method: paymentMethod,
-        delivery_date: deliveryDate,
-        status: "confirmed",
-        created_at: new Date().toISOString(),
+        id: orderId, user_id: req.user.userId, items, fulfillment,
+        address: address ?? null, total, payment_method: paymentMethod,
+        delivery_date: deliveryDate, status: "confirmed", created_at: new Date().toISOString(),
       }).select().single();
       if (error) throw error;
       return res.status(201).json({ order: data });

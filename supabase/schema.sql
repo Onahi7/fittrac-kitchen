@@ -203,6 +203,57 @@ INSERT INTO app_settings (key, value) VALUES
   ('announcement',    '')
 ON CONFLICT (key) DO NOTHING;
 
+-- ─── Admin Users (hashed credentials, seeded on server start) ────
+CREATE TABLE IF NOT EXISTS admin_users (
+  id            TEXT PRIMARY KEY,
+  username      TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  display_name  TEXT NOT NULL,
+  role          TEXT DEFAULT 'admin' CHECK (role IN ('admin','super_admin')),
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ─── Admin Sessions (replaces in-memory Set) ─────────────────────
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  token      TEXT PRIMARY KEY,
+  admin_id   TEXT NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  username   TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
+
+-- ─── User Sessions (replaces in-memory Map) ──────────────────────
+CREATE TABLE IF NOT EXISTS user_sessions (
+  token      TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email      TEXT NOT NULL,
+  name       TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_expires ON user_sessions(expires_at);
+
+-- ─── Clinical Test Requests (replaces in-memory object) ──────────
+CREATE TABLE IF NOT EXISTS clinical_test_requests (
+  id               TEXT PRIMARY KEY,
+  consultation_id  TEXT,
+  doctor_name      TEXT,
+  requested_at     TIMESTAMPTZ DEFAULT NOW(),
+  tests            JSONB DEFAULT '[]',
+  status           TEXT DEFAULT 'pending' CHECK (status IN ('pending','completed','cancelled')),
+  result_image_uri TEXT,
+  doctor_comment   TEXT
+);
+
+-- ─── Extend prescriptions for consultation context ────────────────
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS consultation_id TEXT;
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS doctor_name     TEXT;
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS doctor_type     TEXT;
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS issued_at       TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS lab_tests       TEXT[]  DEFAULT '{}';
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS follow_up_date  TEXT;
+
 -- Disable Row Level Security (service role bypasses anyway)
 ALTER TABLE clinical_staff  DISABLE ROW LEVEL SECURITY;
 ALTER TABLE users            DISABLE ROW LEVEL SECURITY;
@@ -213,5 +264,9 @@ ALTER TABLE lab_results      DISABLE ROW LEVEL SECURITY;
 ALTER TABLE meal_plans       DISABLE ROW LEVEL SECURITY;
 ALTER TABLE session_notes    DISABLE ROW LEVEL SECURITY;
 ALTER TABLE prescriptions    DISABLE ROW LEVEL SECURITY;
-ALTER TABLE menu_items       DISABLE ROW LEVEL SECURITY;
-ALTER TABLE app_settings     DISABLE ROW LEVEL SECURITY;
+ALTER TABLE menu_items               DISABLE ROW LEVEL SECURITY;
+ALTER TABLE app_settings             DISABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_users              DISABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_sessions           DISABLE ROW LEVEL SECURITY;
+ALTER TABLE user_sessions            DISABLE ROW LEVEL SECURITY;
+ALTER TABLE clinical_test_requests   DISABLE ROW LEVEL SECURITY;

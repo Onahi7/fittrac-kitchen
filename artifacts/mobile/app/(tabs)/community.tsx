@@ -53,7 +53,38 @@ export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
   const { orders, consultations, todayExercise, weightLogs } = useApp();
 
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [posts, setPosts] = useState<Post[]>([
+    {
+      id: "seed1", userAlias: "Chidi A.", conditionTag: "Diabetes",
+      content: "Day 14 on the Fittrac meal plan — my fasting blood sugar dropped from 148 to 112! The Ofe Onugbu was a game changer 🙏",
+      type: "milestone", date: "2h ago", likes: 24, liked: false, replies: 5,
+    },
+    {
+      id: "seed2", userAlias: "Ngozi F.", conditionTag: "Hypertension",
+      content: "Quick tip: I replaced my evening rice with the Moi Moi & Ugba combo and my BP readings have been consistently better this week.",
+      type: "insight", date: "5h ago", likes: 31, liked: false, replies: 8,
+    },
+    {
+      id: "seed3", userAlias: "Emeka O.", conditionTag: "Weight Loss",
+      content: "Lost 3.2kg this month eating real Nigerian food. Who said you have to starve to lose weight? 💪",
+      type: "milestone", date: "1d ago", likes: 47, liked: false, replies: 12,
+    },
+    {
+      id: "seed4", userAlias: "Amaka B.", conditionTag: "Liver Health",
+      content: "Does anyone have experience with the Bitter Leaf soup for liver support? My nutritionist recommended it but I want to hear real stories.",
+      type: "question", date: "1d ago", likes: 9, liked: false, replies: 14,
+    },
+    {
+      id: "seed5", userAlias: "Tunde K.", conditionTag: "Wellness",
+      content: "Had my first telemedicine consultation today. Dr. Adeyemi was thorough and my new meal plan feels very doable. Excited to start!",
+      type: "meal", date: "2d ago", likes: 18, liked: false, replies: 3,
+    },
+    {
+      id: "seed6", userAlias: "Fatima M.", conditionTag: "Allergies",
+      content: "Finally found a Nigerian diet that works around my groundnut allergy. The Egusi-free options here are 🔥",
+      type: "insight", date: "3d ago", likes: 22, liked: false, replies: 6,
+    },
+  ]);
   const [activeTab, setActiveTab] = useState<"achievements" | "feed">("achievements");
   const [shareInput, setShareInput] = useState("");
   const [showShare, setShowShare] = useState(false);

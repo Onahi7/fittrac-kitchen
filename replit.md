@@ -141,6 +141,12 @@ Base path: `/api/`
 | Clinical Portal — Nutrition analytics (recharts) | ✅ Complete |
 | Clinical Portal — Consultation workspace | ✅ Complete |
 
+## End-to-End Telemedicine Flow
+
+When a doctor opens a consultation in the Admin Wellness page:
+1. **Test Requests**: Selecting tests and clicking "Send" calls `POST /api/admin/test-requests` with `consultationId` + `doctorName`. The route writes individual rows to `lab_results` AND a grouped `clinical_test_requests` row — so `GET /api/clinical/test-requests/consultation/:id` on mobile returns those tests.
+2. **Prescriptions**: The Rx writer sends `consultationId`, `doctorName`, `doctorType`, `labTests`, `followUpDate` to `POST /api/admin/prescriptions`, which now stores all clinical fields. The mobile prescription screen first looks in local context, then fetches `GET /api/clinical/prescriptions/:id` as fallback.
+
 ## Production Hardening Status
 
 All mock/seed data has been removed. The app is fully production-ready pending Supabase provisioning.
@@ -150,10 +156,10 @@ All mock/seed data has been removed. The app is fully production-ready pending S
 | `admin.ts` backend | ✅ Cleaned | Queries Supabase for orders/stats; MENU_ITEMS is static catalog |
 | `clinical-staff.ts` backend | ✅ Cleaned | All MOCK_* removed; returns 503 if DB not configured |
 | `AppContext.tsx` | ✅ Cleaned | Seed functions removed; starts with empty arrays |
-| `prescription.tsx` | ✅ Cleaned | Shows loading + empty state; no DEMO_PRESCRIPTION |
-| `test-results.tsx` | ✅ Cleaned | Loads tests from `/api/clinical/tests`; shows loading/empty states |
-| `consultation-room.tsx` | ✅ Cleaned | Fetches test requests from API; starts empty if none |
-| `community.tsx` | ✅ Cleaned | Achievements computed from real user data; feed starts empty |
+| `prescription.tsx` | ✅ Complete | Fetches from local state first, falls back to `GET /api/clinical/prescriptions/:id` |
+| `test-results.tsx` | ✅ Complete | Loads tests from `/api/clinical/tests`; shows loading/empty states |
+| `consultation-room.tsx` | ✅ Complete | Fetches test requests from API; starts empty if none |
+| `community.tsx` | ✅ Complete | Achievements computed from real user data; feed seeded with 6 community posts |
 | `HOSTING.md` | ✅ Written | Full deployment guide including Nginx, PM2, EAS, Supabase RLS |
 | Supabase schema | ⏳ Pending | Must run `supabase/schema.sql` then `supabase/seed.sql` on production project |
 | Default passwords | ⚠️ Change before live | Admin: `fittrac2026`, Doctors: `doctor2026`, Nutritionists: `nutri2026` |
