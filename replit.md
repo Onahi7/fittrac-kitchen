@@ -60,6 +60,30 @@ URL: `/admin/` · Login: admin / fittrac2026
 - Clinical sidebar: test request checkboxes + prescription writer with medication list
 - Doctor can save prescriptions and mark tests ordered
 
+### Clinical Portal (`artifacts/clinical-portal`) — React + Vite
+URL: `/clinical/` · Design: Nourish Sahel (dark forest green sidebar + warm cream background)
+
+**Role-based access:**
+- **Doctor** — `dr.amara / doctor2026` or `dr.ifiok / doctor2026`
+- **Nutritionist** — `nutri.kezia / nutri2026` or `nutri.chika / nutri2026`
+
+**Pages:**
+| Route | Doctor | Nutritionist |
+|-------|--------|--------------|
+| `/clinical/dashboard` | Today's schedule, critical alerts, patient count | Client adherence summary, avg score, attention list |
+| `/clinical/patients` | Searchable patient list with condition badges | Same (assigned clients) |
+| `/clinical/patients/:id` | Full profile: vitals, labs, Rx, consultation history | Same + meal plans + session notes |
+| `/clinical/consultations` | Today's timeline with Join Call buttons | Same |
+| `/clinical/consultations/:id` | Consultation workspace + prescription writer | Same + session notes form |
+| `/clinical/lab-results` | ✅ Filterable by critical/abnormal/normal | — |
+| `/clinical/prescriptions` | ✅ Rx history with expandable medication details | — |
+| `/clinical/meal-plans` | — | ✅ Client plans with adherence rings + macros |
+| `/clinical/nutrition-analytics` | — | ✅ Recharts: adherence by condition, weekly trend, macro averages |
+
+**Auth:** Bearer token stored as `fk_clinical_token` in localStorage. Role in `fk_clinical_staff`.
+
+**API:** No Orval codegen — calls `/api/clinical-staff/*` directly with `fetchWithAuth()` helper.
+
 ### API Server (`artifacts/api-server`) — Express 5
 Base path: `/api/`
 
@@ -71,6 +95,7 @@ Base path: `/api/`
 | `/api/ai/chat` | `ai.ts` | Anthropic SSE streaming (Vitara persona) |
 | `/api/ai/recommendations` | `ai.ts` | Meal recommendations via Anthropic |
 | `/api/clinical/*` | `clinical.ts` | Test requests, prescriptions, lab tests catalogue |
+| `/api/clinical-staff/*` | `clinical-staff.ts` | Clinical portal auth + full role-based clinical data |
 | `/api/payments/paystack/*` | `payments.ts` | Paystack initialization + webhook (demo mode) |
 | `/api/payments/opay/*` | `payments.ts` | OPay initialization + webhook (demo mode) |
 | `/api/events/stream` | `events.ts` | SSE order event broadcast |
@@ -107,5 +132,13 @@ Base path: `/api/`
 | Test request ordering (admin) | ✅ Complete |
 | Prescription writer (admin) | ✅ Complete |
 | Join Call button on wellness screen | ✅ Complete |
+| Clinical Portal — Doctor dashboard | ✅ Complete |
+| Clinical Portal — Nutritionist dashboard | ✅ Complete |
+| Clinical Portal — Patient management | ✅ Complete |
+| Clinical Portal — Lab results inbox | ✅ Complete |
+| Clinical Portal — Prescription writer + history | ✅ Complete |
+| Clinical Portal — Meal plans + adherence rings | ✅ Complete |
+| Clinical Portal — Nutrition analytics (recharts) | ✅ Complete |
+| Clinical Portal — Consultation workspace | ✅ Complete |
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.

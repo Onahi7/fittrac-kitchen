@@ -3,6 +3,7 @@ import healthRouter from "./health";
 import adminRouter from "./admin";
 import aiRouter from "./ai";
 import clinicalRouter from "./clinical";
+import clinicalStaffRouter from "./clinical-staff";
 import paymentsRouter from "./payments";
 import eventsRouter from "./events";
 
@@ -12,6 +13,7 @@ router.use(healthRouter);
 router.use("/admin", adminRouter);
 router.use("/ai", aiRouter);
 router.use("/clinical", clinicalRouter);
+router.use("/clinical-staff", clinicalStaffRouter);
 router.use("/payments", paymentsRouter);
 router.use("/events", eventsRouter);
 

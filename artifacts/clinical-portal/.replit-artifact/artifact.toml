@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/clinical/"
+title = "Fittrac Clinical Portal"
+version = "1.0.0"
+id = "artifacts/clinical-portal"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/clinical/" ]
+localPort = 26143
+
+[services.development]
+run = "pnpm --filter @workspace/clinical-portal run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/clinical-portal", "run", "build" ]
+publicDir = "artifacts/clinical-portal/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "26143"
+BASE_PATH = "/clinical/"
