@@ -1,4 +1,4 @@
-# Workspace
+# Fittrac Kitchen — Workspace
 
 ## Overview
 
@@ -15,6 +15,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
+- **AI**: Anthropic claude-sonnet-4-6 via Replit AI Integration (SSE streaming)
 
 ## Key Commands
 
@@ -23,5 +24,88 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
+
+## Artifacts
+
+### Mobile App (`artifacts/mobile`) — Expo / React Native
+Health-first Nigerian food ordering app. Design system: Nourish Sahel (Primary #154212, Background #FFF8F4, Epilogue headlines + Manrope body).
+
+**Tabs (6):** Home · Menu · Health · Community · Orders · Profile
+
+**Key screens:**
+- `app/(tabs)/index.tsx` — Home feed with featured meals + quick actions
+- `app/(tabs)/menu.tsx` — Full meal catalogue with health filters
+- `app/(tabs)/health.tsx` — Health hub (macros, goals, calorie tracking)
+- `app/(tabs)/community.tsx` — Achievements grid + community feed with like/share
+- `app/(tabs)/orders.tsx` — Live order tracking via SSE
+- `app/(tabs)/profile.tsx` — Profile + health preferences
+- `app/wellness.tsx` — Telemedicine: specialist booking + upcoming session (Join Call + View Rx)
+- `app/consultation-room.tsx` — Full video call UI (dark theme, animated frames, chat panel, test requests, prescriptions)
+- `app/ai-coach.tsx` — Vitara AI health coach chat (Anthropic SSE streaming)
+- `app/test-results.tsx` — Upload lab results (image picker flow)
+- `app/prescription.tsx` — Rx document viewer
+- `app/checkout.tsx` — Cart checkout with Paystack modal + OPay modal
+- `app/meal/[id].tsx` — Meal detail with AI nutritional breakdown
+
+**Metro config:** `metro.config.js` sets `watchFolders` to include workspace root so pnpm-hoisted packages resolve correctly.
+
+### Admin Dashboard (`artifacts/admin`) — React + Vite
+URL: `/admin/` · Login: admin / fittrac2026
+
+**Pages:** Dashboard · Orders (SSE live updates) · Meals · Analytics · Wellness (Telemedicine)
+
+**Wellness page features:**
+- Overview tab: active consultation counter + today's schedule
+- Live Sessions tab: 3-panel consultation room (video frames, call controls, clinical sidebar)
+- Clinical sidebar: test request checkboxes + prescription writer with medication list
+- Doctor can save prescriptions and mark tests ordered
+
+### API Server (`artifacts/api-server`) — Express 5
+Base path: `/api/`
+
+**Route groups:**
+| Mount | File | Description |
+|-------|------|-------------|
+| `/api/healthz` | `health.ts` | Health check |
+| `/api/admin/*` | `admin.ts` | Auth, stats, orders, meals, analytics |
+| `/api/ai/chat` | `ai.ts` | Anthropic SSE streaming (Vitara persona) |
+| `/api/ai/recommendations` | `ai.ts` | Meal recommendations via Anthropic |
+| `/api/clinical/*` | `clinical.ts` | Test requests, prescriptions, lab tests catalogue |
+| `/api/payments/paystack/*` | `payments.ts` | Paystack initialization + webhook (demo mode) |
+| `/api/payments/opay/*` | `payments.ts` | OPay initialization + webhook (demo mode) |
+| `/api/events/stream` | `events.ts` | SSE order event broadcast |
+| `/api/events/orders/:id` | `events.ts` | Trigger order status update (admin → SSE) |
+
+**Environment variables:**
+- `SESSION_SECRET` — Express session secret
+- `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` — Replit AI proxy base URL
+- `AI_INTEGRATIONS_ANTHROPIC_API_KEY` — Replit AI proxy API key
+
+## Design System — Nourish Sahel
+
+| Token | Value |
+|-------|-------|
+| Primary | `#154212` (deep forest green) |
+| Secondary | `#A0522D` (warm sienna) |
+| Background | `#FFF8F4` (warm cream) |
+| Headline font | Epilogue (700 Bold) |
+| Body font | Manrope (400 Regular, 600 SemiBold, 700 Bold) |
+
+## Feature Status
+
+| Feature | Status |
+|---------|--------|
+| AI Health Coach (Vitara, Anthropic SSE) | ✅ Complete |
+| Paystack payment modal | ✅ Complete (demo mode) |
+| OPay payment modal | ✅ Complete (demo mode) |
+| SSE real-time order tracking | ✅ Complete |
+| Community & Achievements tab | ✅ Complete |
+| Telemedicine video call room (mobile) | ✅ Complete |
+| Test result upload (mobile) | ✅ Complete |
+| Prescription viewer (mobile) | ✅ Complete |
+| Doctor consultation room (admin) | ✅ Complete |
+| Test request ordering (admin) | ✅ Complete |
+| Prescription writer (admin) | ✅ Complete |
+| Join Call button on wellness screen | ✅ Complete |
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.

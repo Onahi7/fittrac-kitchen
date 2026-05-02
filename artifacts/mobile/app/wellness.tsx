@@ -172,6 +172,28 @@ export default function WellnessScreen() {
             <Text style={[styles.upcomingTime, { color: colors.tertiary, fontFamily: "Manrope_400Regular" }]}>
               {upcomingConsults[0].date} at {upcomingConsults[0].time} · {upcomingConsults[0].specialistType}
             </Text>
+            <View style={styles.upcomingActions}>
+              <Pressable
+                style={[styles.joinCallBtn, { backgroundColor: colors.tertiary }]}
+                onPress={() => router.push({
+                  pathname: "/consultation-room",
+                  params: {
+                    consultationId: upcomingConsults[0].id,
+                    specialistName: upcomingConsults[0].specialistName,
+                    specialistType: upcomingConsults[0].specialistType,
+                  },
+                })}
+              >
+                <Feather name="video" size={15} color="#fff" />
+                <Text style={[styles.joinCallText, { fontFamily: "Manrope_700Bold" }]}>Join Call</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.rxBtn, { backgroundColor: "rgba(255,255,255,0.2)" }]}
+                onPress={() => router.push({ pathname: "/prescription", params: { prescriptionId: "RX-DEMO001" } })}
+              >
+                <Text style={[styles.rxBtnText, { color: colors.tertiary, fontFamily: "Manrope_600SemiBold" }]}>View Rx</Text>
+              </Pressable>
+            </View>
           </View>
         )}
 
@@ -537,6 +559,11 @@ const styles = StyleSheet.create({
   upcomingLabel: { fontSize: 10, letterSpacing: 1.5 },
   upcomingTitle: { fontSize: 20 },
   upcomingTime: { fontSize: 13 },
+  upcomingActions: { flexDirection: "row", gap: 10, marginTop: 8 },
+  joinCallBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 12 },
+  joinCallText: { color: "#fff", fontSize: 14 },
+  rxBtn: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 12, justifyContent: "center" },
+  rxBtnText: { fontSize: 14 },
   sectionHeader: { gap: 4 },
   sectionTitle: { fontSize: 22 },
   sectionSub: { fontSize: 13 },

@@ -57,6 +57,10 @@ function RootLayoutNav() {
         <Stack.Screen name="exercise" options={{ presentation: "card" }} />
         <Stack.Screen name="water" options={{ presentation: "card" }} />
         <Stack.Screen name="notifications" options={{ presentation: "card" }} />
+        <Stack.Screen name="ai-coach" options={{ presentation: "card" }} />
+        <Stack.Screen name="consultation-room" options={{ presentation: "fullScreenModal" }} />
+        <Stack.Screen name="test-results" options={{ presentation: "card" }} />
+        <Stack.Screen name="prescription" options={{ presentation: "card" }} />
       </Stack>
     </>
   );

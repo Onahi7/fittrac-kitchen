@@ -13,6 +13,8 @@ import type {
   ExerciseLog,
   NutritionLog,
   Order,
+  Prescription,
+  TestRequest,
   UserProfile,
   WaterLog,
   WeightLog,
@@ -27,6 +29,8 @@ interface AppContextValue {
   exerciseLogs: ExerciseLog[];
   waterLogs: WaterLog[];
   consultations: Consultation[];
+  prescriptions: Prescription[];
+  testRequests: TestRequest[];
   isLoading: boolean;
   isOnboarded: boolean;
   setConditions: (conditions: Condition[]) => Promise<void>;
@@ -41,6 +45,9 @@ interface AppContextValue {
   logExercise: (log: Omit<ExerciseLog, "id" | "date">) => Promise<void>;
   logWater: (glasses: number) => Promise<void>;
   bookConsultation: (c: Omit<Consultation, "id" | "status">) => Promise<void>;
+  addPrescription: (rx: Prescription) => void;
+  addTestRequest: (tr: TestRequest) => void;
+  updateTestRequest: (id: string, updates: Partial<TestRequest>) => void;
   basketTotal: number;
   basketCount: number;
   todayNutrition: NutritionLog | null;
@@ -59,6 +66,8 @@ const STORAGE_KEYS = {
   exerciseLogs: "fk_exercise_logs",
   waterLogs: "fk_water_logs",
   consultations: "fk_consultations",
+  prescriptions: "fk_prescriptions",
+  testRequests: "fk_test_requests",
 };
 
 const defaultProfile: UserProfile = {
@@ -135,10 +144,7 @@ function seedWaterLogs(): WaterLog[] {
   for (let i = 6; i >= 1; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    logs.push({
-      date: d.toISOString().split("T")[0],
-      glasses: 4 + Math.floor(Math.random() * 5),
-    });
+    logs.push({ date: d.toISOString().split("T")[0], glasses: 4 + Math.floor(Math.random() * 5) });
   }
   return logs;
 }
@@ -152,57 +158,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [exerciseLogs, setExerciseLogs] = useState<ExerciseLog[]>([]);
   const [waterLogs, setWaterLogs] = useState<WaterLog[]>([]);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+  const [testRequests, setTestRequests] = useState<TestRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     try {
-      const [profileStr, ordersStr, weightStr, nutritionStr, exerciseStr, waterStr, consultStr] =
-        await Promise.all([
-          AsyncStorage.getItem(STORAGE_KEYS.profile),
-          AsyncStorage.getItem(STORAGE_KEYS.orders),
-          AsyncStorage.getItem(STORAGE_KEYS.weightLogs),
-          AsyncStorage.getItem(STORAGE_KEYS.nutritionLogs),
-          AsyncStorage.getItem(STORAGE_KEYS.exerciseLogs),
-          AsyncStorage.getItem(STORAGE_KEYS.waterLogs),
-          AsyncStorage.getItem(STORAGE_KEYS.consultations),
-        ]);
+      const results = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEYS.profile),
+        AsyncStorage.getItem(STORAGE_KEYS.orders),
+        AsyncStorage.getItem(STORAGE_KEYS.weightLogs),
+        AsyncStorage.getItem(STORAGE_KEYS.nutritionLogs),
+        AsyncStorage.getItem(STORAGE_KEYS.exerciseLogs),
+        AsyncStorage.getItem(STORAGE_KEYS.waterLogs),
+        AsyncStorage.getItem(STORAGE_KEYS.consultations),
+        AsyncStorage.getItem(STORAGE_KEYS.prescriptions),
+        AsyncStorage.getItem(STORAGE_KEYS.testRequests),
+      ]);
+      const [profileStr, ordersStr, weightStr, nutritionStr, exerciseStr, waterStr, consultStr, rxStr, trStr] = results;
+
       if (profileStr) setProfile(JSON.parse(profileStr));
       if (ordersStr) setOrders(JSON.parse(ordersStr));
-      if (weightStr) {
-        setWeightLogs(JSON.parse(weightStr));
-      } else {
-        const seed = seedWeightLogs();
-        setWeightLogs(seed);
+      if (weightStr) { setWeightLogs(JSON.parse(weightStr)); } else {
+        const seed = seedWeightLogs(); setWeightLogs(seed);
         await AsyncStorage.setItem(STORAGE_KEYS.weightLogs, JSON.stringify(seed));
       }
-      if (nutritionStr) {
-        setNutritionLogs(JSON.parse(nutritionStr));
-      } else {
-        const seed = seedNutritionLogs();
-        setNutritionLogs(seed);
+      if (nutritionStr) { setNutritionLogs(JSON.parse(nutritionStr)); } else {
+        const seed = seedNutritionLogs(); setNutritionLogs(seed);
         await AsyncStorage.setItem(STORAGE_KEYS.nutritionLogs, JSON.stringify(seed));
       }
-      if (exerciseStr) {
-        setExerciseLogs(JSON.parse(exerciseStr));
-      } else {
-        const seed = seedExerciseLogs();
-        setExerciseLogs(seed);
+      if (exerciseStr) { setExerciseLogs(JSON.parse(exerciseStr)); } else {
+        const seed = seedExerciseLogs(); setExerciseLogs(seed);
         await AsyncStorage.setItem(STORAGE_KEYS.exerciseLogs, JSON.stringify(seed));
       }
-      if (waterStr) {
-        setWaterLogs(JSON.parse(waterStr));
-      } else {
-        const seed = seedWaterLogs();
-        setWaterLogs(seed);
+      if (waterStr) { setWaterLogs(JSON.parse(waterStr)); } else {
+        const seed = seedWaterLogs(); setWaterLogs(seed);
         await AsyncStorage.setItem(STORAGE_KEYS.waterLogs, JSON.stringify(seed));
       }
       if (consultStr) setConsultations(JSON.parse(consultStr));
-    } catch (e) {
-    } finally {
-      setIsLoading(false);
-    }
+      if (rxStr) setPrescriptions(JSON.parse(rxStr));
+      if (trStr) setTestRequests(JSON.parse(trStr));
+    } catch {} finally { setIsLoading(false); }
   };
 
   const saveProfile = async (p: UserProfile) => { setProfile(p); await AsyncStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(p)); };
@@ -212,6 +210,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const saveExerciseLogs = async (logs: ExerciseLog[]) => { setExerciseLogs(logs); await AsyncStorage.setItem(STORAGE_KEYS.exerciseLogs, JSON.stringify(logs)); };
   const saveWaterLogs = async (logs: WaterLog[]) => { setWaterLogs(logs); await AsyncStorage.setItem(STORAGE_KEYS.waterLogs, JSON.stringify(logs)); };
   const saveConsultations = async (cons: Consultation[]) => { setConsultations(cons); await AsyncStorage.setItem(STORAGE_KEYS.consultations, JSON.stringify(cons)); };
+  const savePrescriptions = async (rxs: Prescription[]) => { setPrescriptions(rxs); await AsyncStorage.setItem(STORAGE_KEYS.prescriptions, JSON.stringify(rxs)); };
+  const saveTestRequests = async (trs: TestRequest[]) => { setTestRequests(trs); await AsyncStorage.setItem(STORAGE_KEYS.testRequests, JSON.stringify(trs)); };
 
   const completeOnboarding = useCallback(async (conditions: Condition[]) => {
     await saveProfile({ ...profile, isOnboarded: true, conditions });
@@ -299,15 +299,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await saveConsultations([consultation, ...consultations]);
   }, [consultations]);
 
+  const addPrescription = useCallback((rx: Prescription) => {
+    savePrescriptions([rx, ...prescriptions]);
+  }, [prescriptions]);
+
+  const addTestRequest = useCallback((tr: TestRequest) => {
+    saveTestRequests([tr, ...testRequests]);
+  }, [testRequests]);
+
+  const updateTestRequest = useCallback((id: string, updates: Partial<TestRequest>) => {
+    const updated = testRequests.map((tr) => tr.id === id ? { ...tr, ...updates } : tr);
+    saveTestRequests(updated);
+  }, [testRequests]);
+
   const basketTotal = basket.reduce((sum, i) => sum + i.meal.price * i.quantity, 0);
   const basketCount = basket.reduce((sum, i) => sum + i.quantity, 0);
-
   const today = new Date().toISOString().split("T")[0];
   const todayNutrition = nutritionLogs.find((l) => l.date === today) ?? null;
   const sortedWeights = [...weightLogs].sort((a, b) => b.date.localeCompare(a.date));
   const currentWeight = sortedWeights[0]?.weight ?? null;
   const todayWater = waterLogs.find((l) => l.date === today)?.glasses ?? 0;
-
   const todayExerciseLogs = exerciseLogs.filter((l) => l.date === today);
   const todayExercise = {
     minutes: todayExerciseLogs.reduce((s, l) => s + l.duration, 0),
@@ -318,10 +329,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppContext.Provider value={{
       profile, basket, orders, weightLogs, nutritionLogs, exerciseLogs,
-      waterLogs, consultations, isLoading, isOnboarded: profile.isOnboarded,
+      waterLogs, consultations, prescriptions, testRequests,
+      isLoading, isOnboarded: profile.isOnboarded,
       setConditions, setDietaryRestrictions, completeOnboarding,
       addToBasket, removeFromBasket, clearBasket, placeOrder,
       logWeight, logNutrition, logExercise, logWater, bookConsultation,
+      addPrescription, addTestRequest, updateTestRequest,
       basketTotal, basketCount, todayNutrition, currentWeight,
       todayWater, todayExercise,
     }}>
