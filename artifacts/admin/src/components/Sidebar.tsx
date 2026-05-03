@@ -35,7 +35,7 @@ const NAV_SECTIONS = [
   },
 ];
 
-export default function Sidebar() {
+function NavContent({ onClose }: { onClose?: () => void }) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
 
@@ -43,8 +43,8 @@ export default function Sidebar() {
     href === "/" ? location === "/" : location.startsWith(href);
 
   return (
-    <aside className="w-64 bg-sidebar text-sidebar-foreground flex flex-col h-full flex-shrink-0">
-      <div className="p-5 border-b border-sidebar-border">
+    <>
+      <div className="p-5 border-b border-sidebar-border flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-base">🌿</div>
           <div>
@@ -52,6 +52,15 @@ export default function Sidebar() {
             <div className="text-sidebar-foreground/50 text-xs">Admin Console</div>
           </div>
         </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-sidebar-foreground/70 hover:bg-white/20 transition-all"
+            aria-label="Close menu"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 p-3 space-y-5 overflow-y-auto">
@@ -66,6 +75,7 @@ export default function Sidebar() {
                 return (
                   <Link key={item.href} href={item.href}>
                     <a
+                      onClick={onClose}
                       className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                         active
                           ? "bg-sidebar-primary text-sidebar-primary-foreground"
@@ -94,13 +104,37 @@ export default function Sidebar() {
           </div>
         </div>
         <button
-          onClick={logout}
+          onClick={() => { logout(); onClose?.(); }}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all"
         >
           <span>🚪</span>
           Sign Out
         </button>
       </div>
-    </aside>
+    </>
+  );
+}
+
+export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }) {
+  return (
+    <>
+      {/* Desktop sidebar — always visible on md+ */}
+      <aside className="hidden md:flex w-64 bg-sidebar text-sidebar-foreground flex-col h-full flex-shrink-0">
+        <NavContent />
+      </aside>
+
+      {/* Mobile drawer — slide in from left */}
+      {isOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={onClose}
+          />
+          <aside className="absolute left-0 top-0 bottom-0 w-72 bg-sidebar text-sidebar-foreground flex flex-col shadow-2xl animate-in slide-in-from-left duration-200">
+            <NavContent onClose={onClose} />
+          </aside>
+        </div>
+      )}
+    </>
   );
 }
