@@ -1,12 +1,14 @@
 import { Router } from "express";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 
 const router = Router();
 
-const anthropic = new Anthropic({
-  apiKey: process.env["AI_INTEGRATIONS_ANTHROPIC_API_KEY"] ?? "dummy",
-  baseURL: process.env["AI_INTEGRATIONS_ANTHROPIC_BASE_URL"],
+const openrouter = new OpenAI({
+  apiKey: process.env["AI_INTEGRATIONS_OPENROUTER_API_KEY"] ?? "dummy",
+  baseURL: process.env["AI_INTEGRATIONS_OPENROUTER_BASE_URL"],
 });
+
+const MODEL = "openai/gpt-oss-120b:free";
 
 const SYSTEM_PROMPT = `You are Vitara, an AI health coach for Fittrac Kitchen — Nigeria's leading health-focused food platform. You specialise in:
 - Nigerian nutrition and traditional healing foods (Egusi, Moringa, Zobo, Fonio, Uda, Uziza, etc.)
@@ -36,16 +38,20 @@ router.post("/chat", async (req, res) => {
     : SYSTEM_PROMPT;
 
   try {
-    const stream = anthropic.messages.stream({
-      model: "claude-sonnet-4-6",
+    const stream = await openrouter.chat.completions.create({
+      model: MODEL,
       max_tokens: 8192,
-      system: systemWithContext,
-      messages: messages.map((m: any) => ({ role: m.role, content: m.content })),
+      stream: true,
+      messages: [
+        { role: "system", content: systemWithContext },
+        ...messages.map((m: any) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      ],
     });
 
-    for await (const event of stream) {
-      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        res.write(`data: ${JSON.stringify({ content: event.delta.text })}\n\n`);
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+      if (content) {
+        res.write(`data: ${JSON.stringify({ content })}\n\n`);
       }
     }
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
@@ -59,23 +65,25 @@ router.post("/chat", async (req, res) => {
 router.post("/recommendations", async (req, res) => {
   const { conditions, recentMeals, weightTrend, todayNutrition } = req.body;
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const response = await openrouter.chat.completions.create({
+      model: MODEL,
       max_tokens: 8192,
-      system: SYSTEM_PROMPT,
-      messages: [{
-        role: "user",
-        content: `Based on my health data, give me 3 specific meal recommendations from the Fittrac Kitchen menu and 2 health tips.
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: `Based on my health data, give me 3 specific meal recommendations from the Fittrac Kitchen menu and 2 health tips.
 Conditions: ${conditions?.join(", ") || "none specified"}
 Recent meals: ${recentMeals?.join(", ") || "none logged"}
 Weight trend: ${weightTrend || "stable"}
 Today's calories: ${todayNutrition?.calories || 0} kcal, Protein: ${todayNutrition?.protein || 0}g, Fiber: ${todayNutrition?.fiber || 0}g
 
-Respond as JSON: { "meals": [{ "name": string, "reason": string, "healthBenefit": string }], "tips": [string] }`
-      }],
+Respond as JSON: { "meals": [{ "name": string, "reason": string, "healthBenefit": string }], "tips": [string] }`,
+        },
+      ],
     });
-    const block = message.content[0];
-    const text = block.type === "text" ? block.text : "{}";
+
+    const text = response.choices[0]?.message?.content ?? "{}";
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       return res.json(jsonMatch ? JSON.parse(jsonMatch[0]) : { meals: [], tips: [] });

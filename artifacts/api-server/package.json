@@ -10,7 +10,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.92.0",
     "@aws-sdk/client-ses": "^3.1040.0",
     "@supabase/supabase-js": "^2.105.1",
     "@workspace/api-zod": "workspace:*",
@@ -21,6 +20,7 @@
     "express": "^5",
     "express-rate-limit": "^8.4.1",
     "helmet": "^8.1.0",
+    "openai": "^4.104.0",
     "pino": "^9",
     "pino-http": "^10"
   },
