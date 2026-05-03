@@ -14,7 +14,7 @@ export default function Login() {
     setLoading(true);
     setError("");
     const success = await login(phone.trim(), pin);
-    if (!success) setError("Invalid phone or PIN. Try rider / 1234");
+    if (!success) setError("Invalid phone number or PIN. Please try again.");
     setLoading(false);
   };
 
@@ -69,12 +69,10 @@ export default function Login() {
           </button>
         </form>
 
-        {/* Demo credentials */}
         <div className="mt-8 bg-accent/50 rounded-2xl p-4">
-          <div className="text-xs font-semibold text-primary uppercase tracking-wider mb-2">Demo Credentials</div>
+          <div className="text-xs font-semibold text-primary uppercase tracking-wider mb-2">How to Sign In</div>
           <div className="text-sm text-foreground space-y-1">
-            <div className="flex justify-between"><span className="text-muted-foreground">Phone/ID:</span><span className="font-mono font-semibold">rider</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">PIN:</span><span className="font-mono font-semibold">1234</span></div>
+            <p className="text-muted-foreground">Enter your registered phone number and 4-digit PIN assigned by Fittrac Kitchen.</p>
           </div>
         </div>
 

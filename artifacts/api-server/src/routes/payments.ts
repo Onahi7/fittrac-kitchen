@@ -1,13 +1,43 @@
 import { Router } from "express";
 import crypto from "crypto";
+import { supabase } from "../lib/supabase.js";
 
 const router = Router();
 
 const PAYSTACK_SECRET = process.env["PAYSTACK_SECRET_KEY"] ?? "";
-const TRANSACTIONS: Record<string, any> = {};
 
 function generateRef(): string {
   return `FKT-${Date.now()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+}
+
+async function savePayment(data: {
+  reference: string; amount: number; email?: string; phone?: string;
+  orderId?: string; gateway: string; method?: string; status: string; metadata?: any;
+}) {
+  if (!supabase) return;
+  try {
+    await supabase.from("payments").upsert({
+      reference: data.reference,
+      amount: Math.round(data.amount),
+      email: data.email ?? null,
+      phone: data.phone ?? null,
+      order_id: data.orderId ?? null,
+      gateway: data.gateway,
+      method: data.method ?? null,
+      status: data.status,
+      metadata: data.metadata ?? {},
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "reference" });
+  } catch { /* non-critical */ }
+}
+
+async function updatePaymentStatus(reference: string, status: string) {
+  if (!supabase) return;
+  try {
+    await supabase.from("payments")
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq("reference", reference);
+  } catch { /* non-critical */ }
 }
 
 router.post("/paystack/initialize", async (req, res) => {
@@ -20,15 +50,14 @@ router.post("/paystack/initialize", async (req, res) => {
   const amountInKobo = Math.round(amount * 100);
 
   if (!PAYSTACK_SECRET) {
-    const mockRef = reference;
-    TRANSACTIONS[mockRef] = { reference: mockRef, amount, email, orderId, status: "initialized", metadata };
+    await savePayment({ reference, amount, email, orderId, gateway: "demo", status: "initialized", metadata });
     return res.json({
       status: true,
       message: "Authorization URL created (demo mode)",
       data: {
-        authorization_url: `https://checkout.paystack.com/demo/${mockRef}`,
-        access_code: `demo_${mockRef}`,
-        reference: mockRef,
+        authorization_url: `https://checkout.paystack.com/demo/${reference}`,
+        access_code: `demo_${reference}`,
+        reference,
       },
       demo: true,
     });
@@ -45,7 +74,7 @@ router.post("/paystack/initialize", async (req, res) => {
     });
     const data = await response.json() as any;
     if (data.status) {
-      TRANSACTIONS[reference] = { reference, amount, email, orderId, status: "initialized", metadata };
+      await savePayment({ reference, amount, email, orderId, gateway: "paystack", status: "initialized", metadata });
     }
     return res.json(data);
   } catch (err: any) {
@@ -57,10 +86,11 @@ router.get("/paystack/verify/:reference", async (req, res) => {
   const { reference } = req.params;
 
   if (!PAYSTACK_SECRET) {
-    const tx = TRANSACTIONS[reference];
-    if (!tx) return res.status(404).json({ error: "Transaction not found" });
-    TRANSACTIONS[reference] = { ...tx, status: "success" };
-    return res.json({ status: true, data: { status: "success", reference, amount: tx.amount * 100, gateway_response: "Approved (demo)" } });
+    if (!supabase) return res.status(404).json({ error: "Transaction not found" });
+    const { data } = await supabase.from("payments").select("*").eq("reference", reference).maybeSingle();
+    if (!data) return res.status(404).json({ error: "Transaction not found" });
+    await updatePaymentStatus(reference, "success");
+    return res.json({ status: true, data: { status: "success", reference, amount: data.amount * 100, gateway_response: "Approved (demo)" } });
   }
 
   try {
@@ -68,8 +98,8 @@ router.get("/paystack/verify/:reference", async (req, res) => {
       headers: { Authorization: `Bearer ${PAYSTACK_SECRET}` },
     });
     const data = await response.json() as any;
-    if (data.data?.status === "success" && TRANSACTIONS[reference]) {
-      TRANSACTIONS[reference].status = "success";
+    if (data.data?.status === "success") {
+      await updatePaymentStatus(reference, "success");
     }
     return res.json(data);
   } catch (err: any) {
@@ -77,10 +107,10 @@ router.get("/paystack/verify/:reference", async (req, res) => {
   }
 });
 
-router.post("/opay/initialize", (req, res) => {
+router.post("/opay/initialize", async (req, res) => {
   const { amount, phone, orderId, method } = req.body;
   const reference = generateRef();
-  TRANSACTIONS[reference] = { reference, amount, phone, orderId, method, status: "initialized", gateway: "opay" };
+  await savePayment({ reference, amount, phone, orderId, gateway: "opay", method: method ?? "bank_transfer", status: "initialized" });
   return res.json({
     status: true,
     message: "OPay payment initialized",
@@ -94,16 +124,27 @@ router.post("/opay/initialize", (req, res) => {
   });
 });
 
-router.get("/opay/verify/:reference", (req, res) => {
+router.get("/opay/verify/:reference", async (req, res) => {
   const { reference } = req.params;
-  const tx = TRANSACTIONS[reference];
-  if (!tx) return res.status(404).json({ error: "Not found" });
-  TRANSACTIONS[reference] = { ...tx, status: "success" };
-  return res.json({ status: true, data: { status: "success", reference, amount: tx.amount } });
+  if (!supabase) return res.status(404).json({ error: "Not found" });
+  const { data } = await supabase.from("payments").select("*").eq("reference", reference).maybeSingle();
+  if (!data) return res.status(404).json({ error: "Not found" });
+  await updatePaymentStatus(reference, "success");
+  return res.json({ status: true, data: { status: "success", reference, amount: data.amount } });
 });
 
-router.get("/transactions", (req, res) => {
-  return res.json(Object.values(TRANSACTIONS).sort((a: any, b: any) => b.reference.localeCompare(a.reference)));
+router.get("/transactions", async (_req, res) => {
+  if (!supabase) return res.json([]);
+  try {
+    const { data } = await supabase
+      .from("payments")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    return res.json(data ?? []);
+  } catch {
+    return res.json([]);
+  }
 });
 
 export default router;

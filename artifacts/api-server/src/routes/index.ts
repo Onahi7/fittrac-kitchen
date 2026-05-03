@@ -7,6 +7,8 @@ import clinicalRouter from "./clinical";
 import clinicalStaffRouter from "./clinical-staff";
 import paymentsRouter from "./payments";
 import eventsRouter from "./events";
+import ridersRouter from "./riders";
+import specialistsRouter from "./specialists";
 
 const router: IRouter = Router();
 
@@ -18,5 +20,7 @@ router.use("/clinical", clinicalRouter);
 router.use("/clinical-staff", clinicalStaffRouter);
 router.use("/payments", paymentsRouter);
 router.use("/events", eventsRouter);
+router.use("/riders", ridersRouter);
+router.use("/specialists", specialistsRouter);
 
 export default router;

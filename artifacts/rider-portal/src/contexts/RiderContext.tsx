@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 
 export interface RiderOrder {
   id: string;
@@ -31,106 +31,158 @@ interface RiderContextValue {
   availableOrders: RiderOrder[];
   todayEarnings: number;
   todayDeliveries: number;
+  isLoading: boolean;
   login: (phone: string, pin: string) => Promise<boolean>;
   logout: () => void;
   toggleOnline: () => void;
-  acceptOrder: (order: RiderOrder) => void;
-  updateStatus: (status: RiderOrder["status"]) => void;
+  acceptOrder: (order: RiderOrder) => Promise<void>;
+  updateStatus: (status: RiderOrder["status"]) => Promise<void>;
 }
 
 const RiderContext = createContext<RiderContextValue | null>(null);
 
-const MOCK_ORDERS: RiderOrder[] = [
-  {
-    id: "o1", orderId: "FK-2847", customerName: "Amaka Okonkwo",
-    customerAddress: "14 Ademola Adetokunbo, Victoria Island, Lagos",
-    customerPhone: "+234 803 456 7890", items: ["Moringa Jollof Rice", "Zobo Drink"],
-    total: 6800, pickupAddress: "Fittrac Kitchen, Lekki Phase 1", distance: "3.2 km",
-    estimatedTime: 18, status: "available", earnings: 850,
-  },
-  {
-    id: "o2", orderId: "FK-2848", customerName: "Emeka Nwosu",
-    customerAddress: "7 Bode Thomas, Surulere, Lagos",
-    customerPhone: "+234 901 234 5678", items: ["Egusi Soup + Ofada Rice", "Tilapia Pepper Soup"],
-    total: 9400, pickupAddress: "Fittrac Kitchen, Lekki Phase 1", distance: "5.8 km",
-    estimatedTime: 28, status: "available", earnings: 1200,
-  },
-  {
-    id: "o3", orderId: "FK-2849", customerName: "Fatima Bello",
-    customerAddress: "22 Ibrahim Taiwo Road, Ikoyi, Lagos",
-    customerPhone: "+234 815 678 9012", items: ["Diabetes Meal Box (3 days)", "Moringa Smoothie"],
-    total: 18500, pickupAddress: "Fittrac Kitchen, Lekki Phase 1", distance: "2.1 km",
-    estimatedTime: 12, status: "available", earnings: 2200,
-  },
-];
-
-const MOCK_RIDER: RiderProfile = {
-  id: "r1", name: "Chukwuemeka Adeyemi", phone: "+234 802 345 6789",
-  vehicleType: "motorcycle", rating: 4.8, totalDeliveries: 347,
-};
+const TOKEN_KEY = "fk_rider_token";
 
 export function RiderProvider({ children }: { children: ReactNode }) {
   const [rider, setRider] = useState<RiderProfile | null>(null);
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
   const [isOnline, setIsOnline] = useState(false);
   const [activeOrder, setActiveOrder] = useState<RiderOrder | null>(null);
   const [availableOrders, setAvailableOrders] = useState<RiderOrder[]>([]);
   const [todayEarnings, setTodayEarnings] = useState(0);
   const [todayDeliveries, setTodayDeliveries] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeDeliveryId, setActiveDeliveryId] = useState<string | null>(null);
 
+  const authHeaders = useCallback(() => ({
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  }), [token]);
+
+  // Restore session on mount
   useEffect(() => {
-    const saved = localStorage.getItem("fk_rider");
-    if (saved) {
-      setRider(MOCK_RIDER);
-      setTodayEarnings(4750);
-      setTodayDeliveries(5);
-    }
+    const savedToken = localStorage.getItem(TOKEN_KEY);
+    if (!savedToken) { setIsLoading(false); return; }
+    setToken(savedToken);
+    fetch("/api/riders/me", { headers: { Authorization: `Bearer ${savedToken}` } })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.id) setRider(data as RiderProfile);
+        else { localStorage.removeItem(TOKEN_KEY); setToken(null); }
+      })
+      .catch(() => { localStorage.removeItem(TOKEN_KEY); setToken(null); })
+      .finally(() => setIsLoading(false));
   }, []);
 
+  // Load stats when rider is set
   useEffect(() => {
-    if (isOnline && !activeOrder) {
-      setAvailableOrders(MOCK_ORDERS.filter((o) => o.status === "available"));
-    } else {
+    if (!token || !rider) return;
+    fetch("/api/riders/stats", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data) {
+          setTodayEarnings(data.todayEarnings ?? 0);
+          setTodayDeliveries(data.todayDeliveries ?? 0);
+        }
+      })
+      .catch(() => {});
+  }, [token, rider]);
+
+  // Poll available orders when online and no active order
+  useEffect(() => {
+    if (!isOnline || activeOrder || !token) {
       setAvailableOrders([]);
+      return;
     }
-  }, [isOnline, activeOrder]);
+    const fetchOrders = () => {
+      fetch("/api/riders/available-orders", { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.ok ? r.json() : { orders: [] })
+        .then((data) => setAvailableOrders(data.orders ?? []))
+        .catch(() => {});
+    };
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 15000);
+    return () => clearInterval(interval);
+  }, [isOnline, activeOrder, token]);
 
   const login = async (phone: string, pin: string): Promise<boolean> => {
-    if ((phone === "+234802345678" || phone === "08023456789" || phone === "rider") && pin === "1234") {
-      setRider(MOCK_RIDER);
-      setTodayEarnings(4750);
-      setTodayDeliveries(5);
-      localStorage.setItem("fk_rider", "true");
+    try {
+      const res = await fetch("/api/riders/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, pin }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (!data.token || !data.rider) return false;
+      localStorage.setItem(TOKEN_KEY, data.token);
+      setToken(data.token);
+      setRider(data.rider as RiderProfile);
       return true;
+    } catch {
+      return false;
     }
-    return false;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (token) {
+      await fetch("/api/riders/logout", { method: "POST", headers: authHeaders() }).catch(() => {});
+    }
+    localStorage.removeItem(TOKEN_KEY);
+    setToken(null);
     setRider(null);
     setIsOnline(false);
     setActiveOrder(null);
-    localStorage.removeItem("fk_rider");
+    setAvailableOrders([]);
+    setTodayEarnings(0);
+    setTodayDeliveries(0);
+    setActiveDeliveryId(null);
   };
 
   const toggleOnline = () => setIsOnline((v) => !v);
 
-  const acceptOrder = (order: RiderOrder) => {
-    setActiveOrder({ ...order, status: "accepted" });
-    setAvailableOrders([]);
+  const acceptOrder = async (order: RiderOrder) => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/riders/accept-order", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ orderId: order.orderId }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.deliveryId) setActiveDeliveryId(data.deliveryId);
+      setActiveOrder({ ...order, status: "accepted" });
+      setAvailableOrders([]);
+    } catch { /* optimistic — set order anyway */ }
   };
 
-  const updateStatus = (status: RiderOrder["status"]) => {
-    if (!activeOrder) return;
+  const updateStatus = async (status: RiderOrder["status"]) => {
+    if (!activeOrder || !token) return;
+
+    if (activeDeliveryId) {
+      await fetch(`/api/riders/delivery/${activeDeliveryId}/status`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ status }),
+      }).catch(() => {});
+    }
+
     if (status === "delivered") {
       setTodayEarnings((e) => e + activeOrder.earnings);
       setTodayDeliveries((d) => d + 1);
+      setActiveDeliveryId(null);
       setTimeout(() => setActiveOrder(null), 2000);
     }
     setActiveOrder((o) => o ? { ...o, status } : o);
   };
 
   return (
-    <RiderContext.Provider value={{ rider, isOnline, activeOrder, availableOrders, todayEarnings, todayDeliveries, login, logout, toggleOnline, acceptOrder, updateStatus }}>
+    <RiderContext.Provider value={{
+      rider, isOnline, activeOrder, availableOrders,
+      todayEarnings, todayDeliveries, isLoading,
+      login, logout, toggleOnline, acceptOrder, updateStatus,
+    }}>
       {children}
     </RiderContext.Provider>
   );

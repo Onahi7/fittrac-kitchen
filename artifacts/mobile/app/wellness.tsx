@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Modal,
   Platform,
@@ -16,68 +16,21 @@ import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
-const SPECIALISTS = [
-  {
-    id: "nutritionist",
-    type: "Nutritionist",
-    name: "Dr. Adaeze Okonkwo",
-    specialty: "Clinical Nutrition & Weight Management",
-    badge: "BSN, RD, PhD",
-    conditions: ["weightloss", "diabetes"],
-    price: 8500,
-    rating: 4.9,
-    sessions: 312,
-    availability: "Today",
-    color: "#2D5A27",
-    bg: "#E8F5E9",
-    icon: "thermometer" as const,
-  },
-  {
-    id: "dietitian",
-    type: "Registered Dietitian",
-    name: "Dr. Emeka Nwosu",
-    specialty: "Cardiovascular Diet & Hypertension",
-    badge: "RD, MSc",
-    conditions: ["hypertension", "liver"],
-    price: 7200,
-    rating: 4.8,
-    sessions: 228,
-    availability: "Tomorrow",
-    color: "#8B500A",
-    bg: "#FFF3E0",
-    icon: "heart" as const,
-  },
-  {
-    id: "healthcoach",
-    type: "Health Coach",
-    name: "Coach Fatima Al-Rashid",
-    specialty: "Behavioural Change & Lifestyle Medicine",
-    badge: "CHC, PCC (ICF)",
-    conditions: ["weightloss", "allergies"],
-    price: 5500,
-    rating: 4.9,
-    sessions: 480,
-    availability: "Today",
-    color: "#493700",
-    bg: "#FFF8E1",
-    icon: "activity" as const,
-  },
-  {
-    id: "gp",
-    type: "General Practitioner",
-    name: "Dr. Bola Fashola",
-    specialty: "Metabolic Syndrome & Liver Disease",
-    badge: "MBBS, MRCGP",
-    conditions: ["liver", "hypertension", "diabetes"],
-    price: 12000,
-    rating: 4.7,
-    sessions: 156,
-    availability: "Friday",
-    color: "#154212",
-    bg: "#E8F5E9",
-    icon: "user" as const,
-  },
-];
+interface Specialist {
+  id: string;
+  type: string;
+  name: string;
+  specialty: string;
+  badge: string;
+  conditions: string[];
+  price: number;
+  rating: number;
+  sessions: number;
+  availability: string;
+  color: string;
+  bg: string;
+  icon: "thermometer" | "heart" | "activity" | "user" | "star" | "shield";
+}
 
 const TIME_SLOTS = [
   "9:00 AM", "10:00 AM", "11:00 AM",
@@ -91,9 +44,10 @@ export default function WellnessScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { bookConsultation, consultations, profile } = useApp();
+  const { bookConsultation, consultations, prescriptions, profile } = useApp();
   const { token } = useAuth();
 
+  const [specialists, setSpecialists] = useState<Specialist[]>([]);
   const [selectedSpecialist, setSelectedSpecialist] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState("Today");
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
@@ -101,7 +55,16 @@ export default function WellnessScreen() {
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(false);
 
-  const specialist = SPECIALISTS.find((s) => s.id === selectedSpecialist);
+  useEffect(() => {
+    fetch("/api/specialists")
+      .then((r) => r.ok ? r.json() : { specialists: [] })
+      .then((data) => {
+        if (data.specialists?.length > 0) setSpecialists(data.specialists);
+      })
+      .catch(() => {});
+  }, []);
+
+  const specialist = specialists.find((s) => s.id === selectedSpecialist);
 
   const handleBook = async () => {
     if (!specialist || !selectedSlot) return;
@@ -207,7 +170,10 @@ export default function WellnessScreen() {
               </Pressable>
               <Pressable
                 style={[styles.rxBtn, { backgroundColor: "rgba(255,255,255,0.2)" }]}
-                onPress={() => router.push({ pathname: "/prescription", params: { prescriptionId: "RX-DEMO001" } })}
+                onPress={() => {
+                  const latestRx = prescriptions[0];
+                  if (latestRx) router.push({ pathname: "/prescription", params: { prescriptionId: latestRx.id } });
+                }}
               >
                 <Text style={[styles.rxBtnText, { color: colors.tertiary, fontFamily: "Manrope_600SemiBold" }]}>View Rx</Text>
               </Pressable>
@@ -225,7 +191,7 @@ export default function WellnessScreen() {
         </View>
 
         <View style={styles.specialistList}>
-          {SPECIALISTS.map((s) => {
+          {specialists.map((s) => {
             const selected = selectedSpecialist === s.id;
             const relevant = profile.conditions.some((c) => s.conditions.includes(c));
             return (

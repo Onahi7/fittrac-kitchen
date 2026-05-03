@@ -69,18 +69,6 @@ function authMiddleware(req: any, res: any, next: any) {
   }).catch(() => res.status(401).json({ error: "Unauthorized" }));
 }
 
-const FALLBACK_MENU = [
-  { id: "m1", name: "Akara Protein Balls", price: 3200, calories: 340, mealType: "breakfast", conditions: ["weightloss", "diabetes"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
-  { id: "m2", name: "Egusi Soup + Pounded Yam", price: 5800, calories: 520, mealType: "lunch", conditions: ["hypertension", "liver"], glycemicIndex: "Medium", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
-  { id: "m3", name: "Tilapia Pepper Soup", price: 6200, calories: 280, mealType: "lunch", conditions: ["diabetes", "liver", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Medium", description: "", imageUrl: null, isAvailable: true },
-  { id: "m4", name: "Moi Moi Health Bowl", price: 4500, calories: 380, mealType: "dinner", conditions: ["weightloss", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
-  { id: "m5", name: "Jollof Brown Rice", price: 4800, calories: 420, mealType: "lunch", conditions: ["diabetes", "weightloss"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
-  { id: "m6", name: "Ogbono Light Soup", price: 5200, calories: 310, mealType: "dinner", conditions: ["liver", "hypertension"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
-  { id: "m7", name: "Zobo Detox Drink", price: 1800, calories: 45, mealType: "drink", conditions: ["hypertension", "liver"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
-  { id: "m8", name: "Moringa Power Smoothie", price: 2200, calories: 120, mealType: "drink", conditions: ["diabetes", "weightloss", "liver"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
-  { id: "m9", name: "Turmeric Ginger Elixir", price: 2000, calories: 60, mealType: "drink", conditions: ["hypertension", "liver", "allergies"], glycemicIndex: "Low", sodiumLevel: "Low", description: "", imageUrl: null, isAvailable: true },
-];
-
 function mapMealItem(row: any) {
   return {
     id: row.id, name: row.name, price: row.price, calories: row.calories ?? 0,
@@ -127,15 +115,7 @@ router.post("/login", async (req, res) => {
       return res.json({ token, username: admin.display_name, role: admin.role });
     }
 
-    const envUser = process.env.ADMIN_USERNAME ?? "admin";
-    const envPass = process.env.ADMIN_PASSWORD ?? "fittrac2026";
-    if (username === envUser && hashAdminPassword(password) === hashAdminPassword(envPass)) {
-      const token = generateToken();
-      adminSessionCache.set(token, { adminId: "adm-fallback", username, displayName: "Administrator", cachedAt: Date.now() });
-      return res.json({ token, username: "Administrator", role: "admin" });
-    }
-
-    return res.status(401).json({ error: "Invalid credentials" });
+    return res.status(503).json({ error: "Database not configured" });
   } catch (err: any) {
     req.log?.error(err, "admin login error");
     return res.status(500).json({ error: "Login failed" });
@@ -162,11 +142,11 @@ router.get("/stats", authMiddleware, async (_req, res) => {
     const statusBreakdown: Record<string, number> = {};
     for (const o of all) statusBreakdown[o.status] = (statusBreakdown[o.status] ?? 0) + 1;
     const { data: menuItems } = await supabase.from("menu_items").select("id, name").eq("is_available", true);
-    const totalMeals = (menuItems ?? FALLBACK_MENU).length;
-    const topMeal = (menuItems ?? FALLBACK_MENU)[0]?.name ?? "Egusi Soup";
+    const items = menuItems ?? [];
     return res.json({
       totalOrders: all.length, todayOrders: todayOrders.length, totalRevenue, todayRevenue,
-      totalMeals, conditionBreakdown: {}, statusBreakdown, topMeal,
+      totalMeals: items.length, conditionBreakdown: {}, statusBreakdown,
+      topMeal: items[0]?.name ?? "",
       avgOrderValue: all.length > 0 ? Math.round(totalRevenue / all.length) : 0,
     });
   } catch (err: any) {
@@ -212,24 +192,24 @@ router.patch("/orders/:id/status", authMiddleware, async (req, res) => {
 });
 
 router.get("/meals", authMiddleware, async (_req, res) => {
-  if (!supabase) return res.json(FALLBACK_MENU);
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
   try {
     const { data, error } = await supabase.from("menu_items").select("*").order("display_order", { ascending: true }).order("created_at", { ascending: true });
     if (error) throw error;
-    return res.json((data ?? FALLBACK_MENU).map(mapMealItem));
-  } catch {
-    return res.json(FALLBACK_MENU);
+    return res.json((data ?? []).map(mapMealItem));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
   }
 });
 
 router.get("/menu-items", authMiddleware, async (_req, res) => {
-  if (!supabase) return res.json(FALLBACK_MENU);
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
   try {
     const { data, error } = await supabase.from("menu_items").select("*").order("display_order", { ascending: true }).order("created_at", { ascending: true });
     if (error) throw error;
-    return res.json((data ?? FALLBACK_MENU).map(mapMealItem));
-  } catch {
-    return res.json(FALLBACK_MENU);
+    return res.json((data ?? []).map(mapMealItem));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -307,9 +287,7 @@ router.post("/upload-image", authMiddleware, async (req, res) => {
 });
 
 router.get("/settings", authMiddleware, async (_req, res) => {
-  if (!supabase) {
-    return res.json({ app_tagline: "The Earth's Apothecary", hero_title: "Nigerian Wellness Cuisine", hero_subtitle: "Food as Medicine, Culture as Cure", primary_color: "#154212", secondary_color: "#8b500a", logo_url: "", banner_url: "", announcement: "" });
-  }
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
   try {
     const { data, error } = await supabase.from("app_settings").select("key, value");
     if (error) throw error;
@@ -453,9 +431,9 @@ router.post("/prescriptions", authMiddleware, async (req, res) => {
   }
 });
 
-// ── JSON key-value helpers ────────────────────────────────────────────────────
+// ── JSON key-value helpers (auto-seed defaults into DB on first access) ────────
 
-const FALLBACK_QUOTES = [
+const DEFAULT_QUOTES = [
   { id: "q1", text: "Let food be thy medicine and medicine be thy food.", author: "Hippocrates", category: "health", active: true, daily: true },
   { id: "q2", text: "Your body hears everything your mind says.", author: "Naomi Judd", category: "wellness", active: true, daily: false },
   { id: "q3", text: "The food you eat can be either the safest and most powerful form of medicine or the slowest form of poison.", author: "Ann Wigmore", category: "nutrition", active: true, daily: false },
@@ -464,7 +442,7 @@ const FALLBACK_QUOTES = [
   { id: "q6", text: "Moringa oleifera is considered one of the most nutritious plants on earth.", author: "World Health Organization", category: "nutrition", active: true, daily: false },
 ];
 
-const FALLBACK_CONTENT = [
+const DEFAULT_CONTENT = [
   { id: "c1", title: "Why Moringa is Called the Miracle Tree", type: "food_fact", body: "Moringa contains 7× more vitamin C than oranges, 4× more vitamin A than carrots, and 4× more calcium than milk. Used in Nigerian traditional medicine for centuries to treat inflammation and nutrient deficiency.", active: true, imageUrl: "" },
   { id: "c2", title: "The Power of Egusi Seeds", type: "food_fact", body: "Egusi (melon seeds) are packed with essential amino acids, healthy fats, zinc, and magnesium. They support heart health, provide sustained energy, and help manage blood sugar — ideal for diabetic patients.", active: true, imageUrl: "" },
   { id: "c3", title: "5 Tips for Managing Hypertension Through Diet", type: "health_tip", body: "1. Reduce sodium to 2,300mg/day. 2. Increase potassium via plantain and leafy greens. 3. Choose lean proteins like tilapia. 4. Drink unsweetened Zobo tea — lowers systolic BP by 7–10 mmHg. 5. Avoid excess processed foods and palm oil.", active: true, imageUrl: "" },
@@ -473,12 +451,18 @@ const FALLBACK_CONTENT = [
   { id: "c6", title: "Bitter Leaf & Liver Health", type: "food_fact", body: "Vernonia amygdalina (Bitter Leaf) contains vernonioside and other compounds that support liver detoxification and reduce inflammation. Modern research confirms hepatoprotective effects. Available in Ofe Onugbu.", active: true, imageUrl: "" },
 ];
 
-async function getSettingJson(key: string, fallback: any): Promise<any> {
-  if (!supabase) return fallback;
+async function getSettingJson(key: string, defaults: any): Promise<any> {
+  if (!supabase) return defaults;
   try {
     const { data } = await supabase.from("app_settings").select("value").eq("key", key).maybeSingle();
-    return data?.value ? JSON.parse(data.value) : fallback;
-  } catch { return fallback; }
+    if (data?.value) return JSON.parse(data.value);
+    // Auto-seed defaults into DB on first access
+    await supabase.from("app_settings").upsert(
+      { key, value: JSON.stringify(defaults), updated_at: new Date().toISOString() },
+      { onConflict: "key" }
+    );
+    return defaults;
+  } catch { return defaults; }
 }
 
 async function setSettingJson(key: string, value: any): Promise<void> {
@@ -491,7 +475,8 @@ async function setSettingJson(key: string, value: any): Promise<void> {
 
 // ── Quotes ────────────────────────────────────────────────────────────────────
 router.get("/quotes", authMiddleware, async (_req, res) => {
-  return res.json({ quotes: await getSettingJson("quotes", FALLBACK_QUOTES) });
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  return res.json({ quotes: await getSettingJson("quotes", DEFAULT_QUOTES) });
 });
 
 router.put("/quotes", authMiddleware, async (req, res) => {
@@ -503,15 +488,16 @@ router.put("/quotes", authMiddleware, async (req, res) => {
 });
 
 router.get("/public/daily-quote", async (_req, res) => {
-  const quotes: any[] = await getSettingJson("quotes", FALLBACK_QUOTES);
+  const quotes: any[] = await getSettingJson("quotes", DEFAULT_QUOTES);
   const active = quotes.filter((q) => q.active);
   const daily = active.find((q) => q.daily) ?? active[Math.floor(Date.now() / 86400000) % Math.max(active.length, 1)];
-  return res.json(daily ?? FALLBACK_QUOTES[0]);
+  return res.json(daily ?? DEFAULT_QUOTES[0]);
 });
 
 // ── Health Content ────────────────────────────────────────────────────────────
 router.get("/content", authMiddleware, async (_req, res) => {
-  return res.json({ items: await getSettingJson("health_content", FALLBACK_CONTENT) });
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  return res.json({ items: await getSettingJson("health_content", DEFAULT_CONTENT) });
 });
 
 router.put("/content", authMiddleware, async (req, res) => {
@@ -523,16 +509,16 @@ router.put("/content", authMiddleware, async (req, res) => {
 });
 
 router.get("/public/content", async (_req, res) => {
-  const items: any[] = await getSettingJson("health_content", FALLBACK_CONTENT);
+  const items: any[] = await getSettingJson("health_content", DEFAULT_CONTENT);
   return res.json({ items: items.filter((i) => i.active) });
 });
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 router.get("/users", authMiddleware, async (_req, res) => {
-  if (!supabase) return res.json({ users: [] });
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
   try {
     const [{ data: users }, { data: orders }] = await Promise.all([
-      supabase.from("users").select("id, name, email, phone, conditions, allergies, created_at"),
+      supabase.from("users").select("id, name, email, phone, conditions, created_at"),
       supabase.from("orders").select("user_id, total"),
     ]);
     const orderMap: Record<string, { count: number; total: number }> = {};
@@ -545,7 +531,7 @@ router.get("/users", authMiddleware, async (_req, res) => {
     return res.json({
       users: (users ?? []).map((u: any) => ({
         id: u.id, name: u.name ?? "Unknown", email: u.email, phone: u.phone ?? "",
-        conditions: u.conditions ?? [], allergies: u.allergies ?? [],
+        conditions: u.conditions ?? [], allergies: [],
         joinedAt: u.created_at,
         orderCount: orderMap[u.id]?.count ?? 0,
         totalSpent: orderMap[u.id]?.total ?? 0,
@@ -556,6 +542,7 @@ router.get("/users", authMiddleware, async (_req, res) => {
 
 // ── Community (Featured / Pinned Posts) ──────────────────────────────────────
 router.get("/community-posts", authMiddleware, async (_req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
   return res.json({ posts: await getSettingJson("community_featured", []) });
 });
 
@@ -574,6 +561,7 @@ router.get("/public/community-posts", async (_req, res) => {
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 router.get("/notifications", authMiddleware, async (_req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
   return res.json({ notifications: await getSettingJson("notifications_log", []) });
 });
 
@@ -619,9 +607,9 @@ router.get("/analytics", authMiddleware, async (_req, res) => {
       const day = d.toISOString().split("T")[0];
       return all.filter((o: any) => (o.created_at ?? "").startsWith(day)).length;
     });
-    const avgOrder = all.length > 0 ? Math.round(all.reduce((s: number, o: any) => s + (o.total ?? 0), 0) / all.length) : 7200;
+    const avgOrder = all.length > 0 ? Math.round(all.reduce((s: number, o: any) => s + (o.total ?? 0), 0) / all.length) : 0;
     const weeklyRevenue = weeklyOrders.map((count) => count * avgOrder);
-    const topItems = (menuItems ?? FALLBACK_MENU.slice(0, 5)).map((m: any) => ({ name: m.name, orders: 0, revenue: 0 }));
+    const topItems = (menuItems ?? []).map((m: any) => ({ name: m.name, orders: 0, revenue: 0 }));
     return res.json({ weeklyOrders, weeklyRevenue, conditionTrend: [], topMeals: topItems, totalOrders: all.length });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

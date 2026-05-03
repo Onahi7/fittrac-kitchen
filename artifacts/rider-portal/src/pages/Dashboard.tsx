@@ -7,8 +7,7 @@ export default function Dashboard() {
 
   const handleAccept = async (order: typeof availableOrders[0]) => {
     setAccepting(order.id);
-    await new Promise((r) => setTimeout(r, 600));
-    acceptOrder(order);
+    await acceptOrder(order);
     setAccepting(null);
   };
 

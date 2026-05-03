@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useApp } from "@/context/AppContext";
 import { useColors } from "@/hooks/useColors";
 
 interface DeliveryStatus {
@@ -97,8 +98,12 @@ export default function DeliveryTracking() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { orders } = useApp();
 
-  const orderId = (params.orderId as string) ?? "FK-2841";
+  const orderId = (params.orderId as string) ?? "";
+  const currentOrder = orders.find((o) => o.id === orderId);
+  const orderItems = currentOrder?.items.map((i: any) => i.meal?.name ?? i.name ?? "Item") ?? [];
+
   const [currentStep, setCurrentStep] = useState<0 | 1 | 2 | 3>(1);
   const [riderProgress, setRiderProgress] = useState(0);
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -128,8 +133,6 @@ export default function DeliveryTracking() {
   }, [currentStep]);
 
   const eta = currentStep === 0 ? "35 min" : currentStep === 1 ? "28 min" : currentStep === 2 ? "12 min" : "Arrived!";
-  const riderName = "Chukwuemeka A.";
-  const riderRating = "4.8 ★";
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -205,9 +208,9 @@ export default function DeliveryTracking() {
                 <Text style={styles.riderAvatarText}>🛵</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.riderName, { color: colors.onSurface, fontFamily: "Manrope_700Bold" }]}>{riderName}</Text>
+                <Text style={[styles.riderName, { color: colors.onSurface, fontFamily: "Manrope_700Bold" }]}>Your Rider</Text>
                 <Text style={[styles.riderRating, { color: colors.mutedForeground, fontFamily: "Manrope_400Regular" }]}>
-                  {riderRating} · Motorcycle
+                  Fittrac Certified · On the way
                 </Text>
               </View>
               <View style={[styles.callBtn, { backgroundColor: colors.primary }]}>
@@ -240,15 +243,17 @@ export default function DeliveryTracking() {
         )}
 
         {/* Order summary */}
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text style={[styles.cardTitle, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>Order Summary</Text>
-          {["Moringa Jollof Rice", "Zobo Hibiscus Drink"].map((item) => (
-            <View key={item} style={styles.orderItem}>
-              <Text style={[styles.orderItemDot, { color: colors.primary }]}>•</Text>
-              <Text style={[styles.orderItemText, { color: colors.onSurface, fontFamily: "Manrope_400Regular" }]}>{item}</Text>
-            </View>
-          ))}
-        </View>
+        {orderItems.length > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <Text style={[styles.cardTitle, { color: colors.onSurface, fontFamily: "Epilogue_700Bold" }]}>Order Summary</Text>
+            {orderItems.map((item: string, idx: number) => (
+              <View key={idx} style={styles.orderItem}>
+                <Text style={[styles.orderItemDot, { color: colors.primary }]}>•</Text>
+                <Text style={[styles.orderItemText, { color: colors.onSurface, fontFamily: "Manrope_400Regular" }]}>{item}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
