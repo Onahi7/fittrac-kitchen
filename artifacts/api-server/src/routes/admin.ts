@@ -453,6 +453,157 @@ router.post("/prescriptions", authMiddleware, async (req, res) => {
   }
 });
 
+// ── JSON key-value helpers ────────────────────────────────────────────────────
+
+const FALLBACK_QUOTES = [
+  { id: "q1", text: "Let food be thy medicine and medicine be thy food.", author: "Hippocrates", category: "health", active: true, daily: true },
+  { id: "q2", text: "Your body hears everything your mind says.", author: "Naomi Judd", category: "wellness", active: true, daily: false },
+  { id: "q3", text: "The food you eat can be either the safest and most powerful form of medicine or the slowest form of poison.", author: "Ann Wigmore", category: "nutrition", active: true, daily: false },
+  { id: "q4", text: "A healthy outside starts from the inside.", author: "Robert Urich", category: "wellness", active: true, daily: false },
+  { id: "q5", text: "Take care of your body. It's the only place you have to live.", author: "Jim Rohn", category: "motivation", active: true, daily: false },
+  { id: "q6", text: "Moringa oleifera is considered one of the most nutritious plants on earth.", author: "World Health Organization", category: "nutrition", active: true, daily: false },
+];
+
+const FALLBACK_CONTENT = [
+  { id: "c1", title: "Why Moringa is Called the Miracle Tree", type: "food_fact", body: "Moringa contains 7× more vitamin C than oranges, 4× more vitamin A than carrots, and 4× more calcium than milk. Used in Nigerian traditional medicine for centuries to treat inflammation and nutrient deficiency.", active: true, imageUrl: "" },
+  { id: "c2", title: "The Power of Egusi Seeds", type: "food_fact", body: "Egusi (melon seeds) are packed with essential amino acids, healthy fats, zinc, and magnesium. They support heart health, provide sustained energy, and help manage blood sugar — ideal for diabetic patients.", active: true, imageUrl: "" },
+  { id: "c3", title: "5 Tips for Managing Hypertension Through Diet", type: "health_tip", body: "1. Reduce sodium to 2,300mg/day. 2. Increase potassium via plantain and leafy greens. 3. Choose lean proteins like tilapia. 4. Drink unsweetened Zobo tea — lowers systolic BP by 7–10 mmHg. 5. Avoid excess processed foods and palm oil.", active: true, imageUrl: "" },
+  { id: "c4", title: "Zobo: Nigeria's Natural Blood Pressure Solution", type: "meal_spotlight", body: "Hibiscus sabdariffa (Zobo) has proven antihypertensive and antidiabetic properties. Rich in anthocyanins and vitamin C, a daily unsweetened cup can reduce systolic blood pressure significantly. Order it cold at Fittrac Kitchen.", active: true, imageUrl: "" },
+  { id: "c5", title: "Understanding Glycemic Index in Nigerian Foods", type: "wellness_guide", body: "Fonio GI ~25 (very low), white rice GI ~73, Ofada rice ~55, unripe plantain ~40, garri/eba ~56. Choosing lower-GI options maintains stable blood sugar — essential for managing Type 2 Diabetes.", active: true, imageUrl: "" },
+  { id: "c6", title: "Bitter Leaf & Liver Health", type: "food_fact", body: "Vernonia amygdalina (Bitter Leaf) contains vernonioside and other compounds that support liver detoxification and reduce inflammation. Modern research confirms hepatoprotective effects. Available in Ofe Onugbu.", active: true, imageUrl: "" },
+];
+
+async function getSettingJson(key: string, fallback: any): Promise<any> {
+  if (!supabase) return fallback;
+  try {
+    const { data } = await supabase.from("app_settings").select("value").eq("key", key).maybeSingle();
+    return data?.value ? JSON.parse(data.value) : fallback;
+  } catch { return fallback; }
+}
+
+async function setSettingJson(key: string, value: any): Promise<void> {
+  if (!supabase) return;
+  await supabase.from("app_settings").upsert(
+    { key, value: JSON.stringify(value), updated_at: new Date().toISOString() },
+    { onConflict: "key" }
+  );
+}
+
+// ── Quotes ────────────────────────────────────────────────────────────────────
+router.get("/quotes", authMiddleware, async (_req, res) => {
+  return res.json({ quotes: await getSettingJson("quotes", FALLBACK_QUOTES) });
+});
+
+router.put("/quotes", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    await setSettingJson("quotes", req.body.quotes);
+    return res.json({ success: true });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+});
+
+router.get("/public/daily-quote", async (_req, res) => {
+  const quotes: any[] = await getSettingJson("quotes", FALLBACK_QUOTES);
+  const active = quotes.filter((q) => q.active);
+  const daily = active.find((q) => q.daily) ?? active[Math.floor(Date.now() / 86400000) % Math.max(active.length, 1)];
+  return res.json(daily ?? FALLBACK_QUOTES[0]);
+});
+
+// ── Health Content ────────────────────────────────────────────────────────────
+router.get("/content", authMiddleware, async (_req, res) => {
+  return res.json({ items: await getSettingJson("health_content", FALLBACK_CONTENT) });
+});
+
+router.put("/content", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    await setSettingJson("health_content", req.body.items);
+    return res.json({ success: true });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+});
+
+router.get("/public/content", async (_req, res) => {
+  const items: any[] = await getSettingJson("health_content", FALLBACK_CONTENT);
+  return res.json({ items: items.filter((i) => i.active) });
+});
+
+// ── Users ─────────────────────────────────────────────────────────────────────
+router.get("/users", authMiddleware, async (_req, res) => {
+  if (!supabase) return res.json({ users: [] });
+  try {
+    const [{ data: users }, { data: orders }] = await Promise.all([
+      supabase.from("users").select("id, name, email, phone, conditions, allergies, created_at"),
+      supabase.from("orders").select("user_id, total"),
+    ]);
+    const orderMap: Record<string, { count: number; total: number }> = {};
+    for (const o of orders ?? []) {
+      const uid = (o as any).user_id;
+      if (!orderMap[uid]) orderMap[uid] = { count: 0, total: 0 };
+      orderMap[uid].count++;
+      orderMap[uid].total += (o as any).total ?? 0;
+    }
+    return res.json({
+      users: (users ?? []).map((u: any) => ({
+        id: u.id, name: u.name ?? "Unknown", email: u.email, phone: u.phone ?? "",
+        conditions: u.conditions ?? [], allergies: u.allergies ?? [],
+        joinedAt: u.created_at,
+        orderCount: orderMap[u.id]?.count ?? 0,
+        totalSpent: orderMap[u.id]?.total ?? 0,
+      })),
+    });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+});
+
+// ── Community (Featured / Pinned Posts) ──────────────────────────────────────
+router.get("/community-posts", authMiddleware, async (_req, res) => {
+  return res.json({ posts: await getSettingJson("community_featured", []) });
+});
+
+router.put("/community-posts", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    await setSettingJson("community_featured", req.body.posts);
+    return res.json({ success: true });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+});
+
+router.get("/public/community-posts", async (_req, res) => {
+  const posts: any[] = await getSettingJson("community_featured", []);
+  return res.json({ posts: posts.filter((p) => p.active) });
+});
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+router.get("/notifications", authMiddleware, async (_req, res) => {
+  return res.json({ notifications: await getSettingJson("notifications_log", []) });
+});
+
+router.post("/notifications", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const { title, message, type, audience } = req.body;
+    if (!title || !message) return res.status(400).json({ error: "title and message required" });
+    const existing: any[] = await getSettingJson("notifications_log", []);
+    const n = { id: `n-${Date.now()}`, title, message, type: type ?? "announcement", audience: audience ?? "all", sentAt: new Date().toISOString() };
+    await setSettingJson("notifications_log", [n, ...existing].slice(0, 100));
+    return res.status(201).json(n);
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+});
+
+router.delete("/notifications/:id", authMiddleware, async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const existing: any[] = await getSettingJson("notifications_log", []);
+    await setSettingJson("notifications_log", existing.filter((n) => n.id !== req.params.id));
+    return res.json({ success: true });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+});
+
+router.get("/public/latest-notification", async (_req, res) => {
+  const notifs: any[] = await getSettingJson("notifications_log", []);
+  return res.json(notifs[0] ?? null);
+});
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
 router.get("/analytics", authMiddleware, async (_req, res) => {
   if (!supabase) return res.status(503).json({ error: "Database not configured" });
   try {

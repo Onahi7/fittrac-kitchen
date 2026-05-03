@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Platform,
   Pressable,
@@ -19,6 +19,8 @@ import {
   getTodayMenu,
   getTomorrowMenu,
 } from "@/constants/data";
+
+interface DailyQuote { text: string; author: string; category: string; }
 
 const WATER_GOAL = 8;
 const CALORIE_GOAL = 2000;
@@ -55,6 +57,15 @@ export default function HomeScreen() {
   const todayCal = todayNutrition?.calories ?? 0;
   const avgCal = 1780;
   const displayCal = todayCal || avgCal;
+
+  const [dailyQuote, setDailyQuote] = useState<DailyQuote | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/public/daily-quote")
+      .then((r) => r.ok ? r.json() : null)
+      .then((q) => { if (q?.text) setDailyQuote(q); })
+      .catch(() => {});
+  }, []);
 
   const quickActions = [
     { icon: "droplet" as const, label: "Log\nWater", route: "/water", color: "#3B8BE0", bg: "#EBF4FF" },
@@ -183,6 +194,22 @@ export default function HomeScreen() {
           ))}
         </View>
       </Pressable>
+
+      {dailyQuote && (
+        <View style={[styles.quoteCard, { backgroundColor: colors.card }]}>
+          <View style={styles.quoteTop}>
+            <Text style={[styles.quoteLabel, { color: colors.primary, fontFamily: "Manrope_600SemiBold" }]}>
+              ☀️  DAILY QUOTE
+            </Text>
+          </View>
+          <Text style={[styles.quoteText, { color: colors.onSurface, fontFamily: "Manrope_500Medium" }]}>
+            "{dailyQuote.text}"
+          </Text>
+          <Text style={[styles.quoteAuthor, { color: colors.mutedForeground, fontFamily: "Manrope_400Regular" }]}>
+            — {dailyQuote.author}
+          </Text>
+        </View>
+      )}
 
       <View
         style={[styles.themeBanner, { backgroundColor: colors.primaryContainer }]}
@@ -396,4 +423,13 @@ const styles = StyleSheet.create({
   nutritionPct: { fontSize: 11 },
   barTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
   barFill: { height: 6, borderRadius: 3 },
+  quoteCard: {
+    borderRadius: 20, padding: 18, marginBottom: 12, gap: 8,
+    shadowColor: "#1D1B19", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+  },
+  quoteTop: { flexDirection: "row", alignItems: "center", marginBottom: 2 },
+  quoteLabel: { fontSize: 10, letterSpacing: 1.4 },
+  quoteText: { fontSize: 15, lineHeight: 22, fontStyle: "italic" },
+  quoteAuthor: { fontSize: 12, lineHeight: 16 },
 });
