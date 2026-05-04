@@ -44,7 +44,7 @@ export default function ClinicalLoginScreen() {
     setError("");
     try {
       await login(username.trim(), password.trim());
-      router.replace("/(clinical-tabs)/cl-schedule");
+      router.replace("/(clinical-tabs)/cl-home");
     } catch (e: any) {
       setError(e.message || "Login failed. Please try again.");
     } finally {

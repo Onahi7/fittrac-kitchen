@@ -244,7 +244,11 @@ router.patch("/delivery/:deliveryId/status", authMiddleware, async (req: any, re
 
     // Update rider total deliveries if delivered
     if (status === "delivered") {
-      await supabase.rpc("increment_rider_deliveries" as any, { rider_id: riderId } as any).catch(() => {});
+      const { error: incrementError } = await supabase.rpc(
+        "increment_rider_deliveries" as any,
+        { rider_id: riderId } as any,
+      );
+      if (incrementError) req.log?.warn({ err: incrementError }, "Failed to increment rider deliveries");
     }
 
     return res.json({ success: true });

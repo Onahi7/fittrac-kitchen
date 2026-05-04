@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -43,6 +44,7 @@ const AVATAR_COLORS = ["#154212", "#8B500A", "#1D4ED8", "#059669", "#7C3AED", "#
 export default function PatientsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { clinicalToken, clinicalStaff } = useClinicalAuth();
 
   const [patients, setPatients] = useState<any[]>([]);
@@ -149,7 +151,10 @@ export default function PatientsScreen() {
               </View>
               <Pressable
                 style={[styles.viewBtn, { backgroundColor: colors.primary + "15" }]}
-                onPress={() => { if (Platform.OS !== "web") Haptics.selectionAsync(); }}
+                onPress={() => {
+                  if (Platform.OS !== "web") Haptics.selectionAsync();
+                  router.push(`/clinical-patient/${p.id}`);
+                }}
               >
                 <Feather name="chevron-right" size={18} color={colors.primary} />
               </Pressable>

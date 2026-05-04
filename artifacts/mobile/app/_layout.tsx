@@ -45,20 +45,25 @@ function NavigationGuard() {
   useEffect(() => {
     if (authLoading || appLoading || clinicalLoading || hasSeenIntro === null) return;
 
-    const inClinicalTabs = segments[0] === "(clinical-tabs)";
-    const inClinicalLogin = segments[0] === "clinical-login";
-    const inLogin = segments[0] === "login";
-    const inRegister = segments[0] === "register";
-    const inOnboarding = segments[0] === "onboarding";
-    const inIntro = segments[0] === "onboarding-welcome";
+    const currentSegment = segments[0] as string | undefined;
+    const inClinicalTabs = currentSegment === "(clinical-tabs)";
+    const inClinicalPatient = currentSegment === "clinical-patient";
+    const inClinicalWorkspace = currentSegment === "consultation-room";
+    const inClinicalLogin = currentSegment === "clinical-login";
+    const inLogin = currentSegment === "login";
+    const inRegister = currentSegment === "register";
+    const inOnboarding = currentSegment === "onboarding";
+    const inIntro = currentSegment === "onboarding-welcome";
     const inAuthFlow = inLogin || inRegister || inOnboarding || inClinicalLogin || inIntro;
 
     if (clinicalStaff) {
-      if (!inClinicalTabs) router.replace("/(clinical-tabs)/cl-schedule");
+      if (!inClinicalTabs && !inClinicalPatient && !inClinicalWorkspace) {
+        router.replace("/(clinical-tabs)/cl-home");
+      }
     } else if (!isAuthenticated) {
       if (!inAuthFlow) {
         if (!hasSeenIntro) {
-          router.replace("/onboarding-welcome");
+          router.replace("/onboarding-welcome" as any);
         } else {
           router.replace("/login");
         }
@@ -83,6 +88,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(clinical-tabs)" />
         <Stack.Screen name="clinical-login" options={{ presentation: "card" }} />
+        <Stack.Screen name="clinical-patient/[id]" options={{ presentation: "card" }} />
         <Stack.Screen name="meal/[id]" options={{ presentation: "card" }} />
         <Stack.Screen name="checkout" options={{ presentation: "card" }} />
         <Stack.Screen name="order-success" options={{ presentation: "fullScreenModal" }} />

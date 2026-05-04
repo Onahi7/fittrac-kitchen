@@ -77,7 +77,7 @@ export default function LoginScreen() {
       >
         <View style={styles.header}>
           <View style={[styles.logoBox, { backgroundColor: colors.primaryContainer }]}>
-            <Feather name={"leaf" as any} size={28} color={colors.primary} />
+            <Feather name="heart" size={28} color={colors.primary} />
           </View>
           <Text style={[styles.title, { color: colors.primary, fontFamily: "Epilogue_700Bold" }]}>
             Welcome back

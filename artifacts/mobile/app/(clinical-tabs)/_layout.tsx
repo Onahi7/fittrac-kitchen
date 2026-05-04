@@ -50,6 +50,13 @@ export default function ClinicalTabLayout() {
       }}
     >
       <Tabs.Screen
+        name="cl-home"
+        options={{
+          title: "Home",
+          tabBarIcon: ({ color }) => <Feather name="home" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="cl-schedule"
         options={{
           title: "Schedule",
