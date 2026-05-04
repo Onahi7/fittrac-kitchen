@@ -195,11 +195,11 @@ export default function LoginScreen() {
 
           <Pressable
             style={[styles.providerBtn, { borderColor: colors.outlineVariant }]}
-            onPress={() => router.push("/clinical-login")}
+            onPress={() => router.push("/staff-login")}
           >
-            <Feather name="shield" size={16} color={colors.primary} />
+            <Feather name="briefcase" size={16} color={colors.primary} />
             <Text style={[styles.providerText, { color: colors.primary, fontFamily: "Manrope_600SemiBold" }]}>
-              Sign in as a healthcare provider
+              Staff login
             </Text>
           </Pressable>
         </View>

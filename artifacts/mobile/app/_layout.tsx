@@ -23,6 +23,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider, useApp } from "@/context/AppContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ClinicalAuthProvider, useClinicalAuth } from "@/context/ClinicalAuthContext";
+import { RiderProvider, useRider } from "@/context/RiderContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -32,6 +33,7 @@ function NavigationGuard() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { isLoading: appLoading } = useApp();
   const { clinicalStaff, isLoading: clinicalLoading } = useClinicalAuth();
+  const { rider, isLoading: riderLoading } = useRider();
   const segments = useSegments();
   const router = useRouter();
   const [hasSeenIntro, setHasSeenIntro] = useState<boolean | null>(null);
@@ -43,22 +45,29 @@ function NavigationGuard() {
   }, []);
 
   useEffect(() => {
-    if (authLoading || appLoading || clinicalLoading || hasSeenIntro === null) return;
+    if (authLoading || appLoading || clinicalLoading || riderLoading || hasSeenIntro === null) return;
 
     const currentSegment = segments[0] as string | undefined;
     const inClinicalTabs = currentSegment === "(clinical-tabs)";
     const inClinicalPatient = currentSegment === "clinical-patient";
     const inClinicalWorkspace = currentSegment === "consultation-room";
     const inClinicalLogin = currentSegment === "clinical-login";
+    const inRiderTabs = currentSegment === "(rider-tabs)";
+    const inRiderLogin = currentSegment === "rider-login";
+    const inStaffLogin = currentSegment === "staff-login";
     const inLogin = currentSegment === "login";
     const inRegister = currentSegment === "register";
     const inOnboarding = currentSegment === "onboarding";
     const inIntro = currentSegment === "onboarding-welcome";
-    const inAuthFlow = inLogin || inRegister || inOnboarding || inClinicalLogin || inIntro;
+    const inAuthFlow = inLogin || inRegister || inOnboarding || inClinicalLogin || inRiderLogin || inStaffLogin || inIntro;
 
     if (clinicalStaff) {
       if (!inClinicalTabs && !inClinicalPatient && !inClinicalWorkspace) {
         router.replace("/(clinical-tabs)/cl-home");
+      }
+    } else if (rider) {
+      if (!inRiderTabs) {
+        router.replace("/(rider-tabs)/rider-home");
       }
     } else if (!isAuthenticated) {
       if (!inAuthFlow) {
@@ -69,9 +78,9 @@ function NavigationGuard() {
         }
       }
     } else {
-      if (inAuthFlow || inClinicalTabs) router.replace("/(tabs)");
+      if (inAuthFlow || inClinicalTabs || inRiderTabs) router.replace("/(tabs)");
     }
-  }, [isAuthenticated, authLoading, appLoading, clinicalStaff, clinicalLoading, segments, hasSeenIntro]);
+  }, [isAuthenticated, authLoading, appLoading, clinicalStaff, clinicalLoading, rider, riderLoading, segments, hasSeenIntro]);
 
   return null;
 }
@@ -87,7 +96,10 @@ function RootLayoutNav() {
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(clinical-tabs)" />
+        <Stack.Screen name="(rider-tabs)" />
         <Stack.Screen name="clinical-login" options={{ presentation: "card" }} />
+        <Stack.Screen name="rider-login" options={{ presentation: "card" }} />
+        <Stack.Screen name="staff-login" options={{ presentation: "card" }} />
         <Stack.Screen name="clinical-patient/[id]" options={{ presentation: "card" }} />
         <Stack.Screen name="meal/[id]" options={{ presentation: "card" }} />
         <Stack.Screen name="checkout" options={{ presentation: "card" }} />
@@ -131,13 +143,15 @@ export default function RootLayout() {
         <AuthProvider>
           <AppProvider>
             <ClinicalAuthProvider>
-              <QueryClientProvider client={queryClient}>
-                <GestureHandlerRootView style={{ flex: 1 }}>
-                  <KeyboardProvider>
-                    <RootLayoutNav />
-                  </KeyboardProvider>
-                </GestureHandlerRootView>
-              </QueryClientProvider>
+              <RiderProvider>
+                <QueryClientProvider client={queryClient}>
+                  <GestureHandlerRootView style={{ flex: 1 }}>
+                    <KeyboardProvider>
+                      <RootLayoutNav />
+                    </KeyboardProvider>
+                  </GestureHandlerRootView>
+                </QueryClientProvider>
+              </RiderProvider>
             </ClinicalAuthProvider>
           </AppProvider>
         </AuthProvider>

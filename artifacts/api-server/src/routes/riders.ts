@@ -59,15 +59,21 @@ router.post("/login", async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Database not configured" });
 
   try {
-    const normalizedPhone = normalizePhone(phone);
+    const rawIdentifier = String(phone).trim();
+    const normalizedPhone = normalizePhone(rawIdentifier);
     const pinHash = hashPin(String(pin));
 
-    const { data: rider } = await supabase
+    const query = supabase
       .from("riders")
       .select("id, name, phone, vehicle_type, rating, total_deliveries, is_active")
-      .eq("phone", normalizedPhone)
       .eq("pin_hash", pinHash)
-      .eq("is_active", true)
+      .eq("is_active", true);
+
+    const { data: rider } = await (
+      rawIdentifier.toLowerCase().startsWith("rid-")
+        ? query.eq("id", rawIdentifier.toLowerCase())
+        : query.eq("phone", normalizedPhone)
+    )
       .maybeSingle();
 
     if (!rider) return res.status(401).json({ error: "Invalid phone or PIN" });
