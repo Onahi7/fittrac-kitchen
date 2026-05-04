@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useClinicalAuth } from "@/context/ClinicalAuthContext";
 import { useColors } from "@/hooks/useColors";
+import { apiFetch } from "@/lib/api";
 
 function initials(name = "Patient") {
   return name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
@@ -52,7 +53,7 @@ export default function ClinicalPatientDetailScreen() {
 
   const load = async () => {
     try {
-      const res = await fetch(`/api/clinical-staff/patients/${id}`, {
+      const res = await apiFetch(`/api/clinical-staff/patients/${id}`, {
         headers: { Authorization: `Bearer ${clinicalToken}` },
       });
       const json = await res.json();

@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
 
 export interface RiderOrder {
   id: string;
@@ -90,7 +91,7 @@ export function RiderProvider({ children }: { children: React.ReactNode }) {
   const loadStats = useCallback(async (token = riderToken) => {
     if (!token) return;
     try {
-      const res = await fetch("/api/riders/stats", { headers: authHeaders(token) });
+      const res = await apiFetch("/api/riders/stats", { headers: authHeaders(token) });
       if (!res.ok) return;
       const data = await res.json();
       setTodayEarnings(data.todayEarnings ?? 0);
@@ -101,7 +102,7 @@ export function RiderProvider({ children }: { children: React.ReactNode }) {
   const loadAvailableOrders = useCallback(async (token = riderToken) => {
     if (!token || activeOrder || !isOnline) return;
     try {
-      const res = await fetch("/api/riders/available-orders", { headers: authHeaders(token) });
+      const res = await apiFetch("/api/riders/available-orders", { headers: authHeaders(token) });
       if (!res.ok) {
         setAvailableOrders([]);
         return;
@@ -125,7 +126,7 @@ export function RiderProvider({ children }: { children: React.ReactNode }) {
           AsyncStorage.getItem(RIDER_KEY),
         ]);
         if (!token || !riderJson) return;
-        const res = await fetch("/api/riders/me", { headers: authHeaders(token) });
+        const res = await apiFetch("/api/riders/me", { headers: authHeaders(token) });
         if (!res.ok) {
           await clearSession();
           return;
@@ -152,7 +153,7 @@ export function RiderProvider({ children }: { children: React.ReactNode }) {
   }, [activeOrder, isOnline, loadAvailableOrders, riderToken]);
 
   const login = useCallback(async (phone: string, pin: string) => {
-    const res = await fetch("/api/riders/login", {
+    const res = await apiFetch("/api/riders/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone, pin }),
@@ -167,7 +168,7 @@ export function RiderProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     if (riderToken) {
-      fetch("/api/riders/logout", { method: "POST", headers: authHeaders() }).catch(() => {});
+      apiFetch("/api/riders/logout", { method: "POST", headers: authHeaders() }).catch(() => {});
     }
     await clearSession();
   }, [authHeaders, riderToken]);
@@ -176,7 +177,7 @@ export function RiderProvider({ children }: { children: React.ReactNode }) {
 
   const acceptOrder = useCallback(async (order: RiderOrder) => {
     if (!riderToken) return;
-    const res = await fetch("/api/riders/accept-order", {
+    const res = await apiFetch("/api/riders/accept-order", {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({ orderId: order.orderId }),
@@ -191,7 +192,7 @@ export function RiderProvider({ children }: { children: React.ReactNode }) {
   const updateStatus = useCallback(async (status: RiderOrder["status"]) => {
     if (!activeOrder || !riderToken) return;
     if (activeDeliveryId) {
-      await fetch(`/api/riders/delivery/${activeDeliveryId}/status`, {
+      await apiFetch(`/api/riders/delivery/${activeDeliveryId}/status`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ status }),

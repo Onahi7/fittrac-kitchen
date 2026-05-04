@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useClinicalAuth } from "@/context/ClinicalAuthContext";
+import { apiFetch } from "@/lib/api";
 import { useColors } from "@/hooks/useColors";
 
 function AdherenceRing({ score, size = 54 }: { score: number; size?: number }) {
@@ -51,7 +52,7 @@ export default function ToolsScreen() {
   const load = async () => {
     try {
       const endpoint = isDoctor ? "/api/clinical-staff/lab-results" : "/api/clinical-staff/meal-plans";
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         headers: { Authorization: `Bearer ${clinicalToken}` },
       });
       const json = await res.json();

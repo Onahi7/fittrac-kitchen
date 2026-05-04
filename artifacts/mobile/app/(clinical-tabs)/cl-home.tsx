@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useClinicalAuth } from "@/context/ClinicalAuthContext";
 import { useColors } from "@/hooks/useColors";
+import { apiFetch } from "@/lib/api";
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -41,9 +42,9 @@ export default function ClinicalHomeScreen() {
     try {
       const headers = { Authorization: `Bearer ${clinicalToken}` };
       const [dashRes, consultRes, patientsRes] = await Promise.all([
-        fetch("/api/clinical-staff/dashboard", { headers }),
-        fetch("/api/clinical-staff/consultations", { headers }),
-        fetch("/api/clinical-staff/patients", { headers }),
+        apiFetch("/api/clinical-staff/dashboard", { headers }),
+        apiFetch("/api/clinical-staff/consultations", { headers }),
+        apiFetch("/api/clinical-staff/patients", { headers }),
       ]);
       const [dashJson, consultJson, patientsJson] = await Promise.all([
         dashRes.json(),

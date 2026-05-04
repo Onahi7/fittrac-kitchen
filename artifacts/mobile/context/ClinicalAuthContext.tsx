@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
 
 const TOKEN_KEY = "fk_clinical_token";
 const STAFF_KEY = "fk_clinical_staff";
@@ -47,7 +48,7 @@ export function ClinicalAuthProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const login = useCallback(async (username: string, password: string) => {
-    const res = await fetch("/api/clinical-staff/login", {
+    const res = await apiFetch("/api/clinical-staff/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),

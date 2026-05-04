@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useApp } from "@/context/AppContext";
 import type { Prescription } from "@/constants/types";
+import { apiFetch } from "@/lib/api";
 
 export default function PrescriptionScreen() {
   const colors = useColors();
@@ -31,7 +32,7 @@ export default function PrescriptionScreen() {
     if (localRx) { setRx(localRx); return; }
     if (!prescriptionId) return;
     setFetching(true);
-    fetch(`/api/clinical/prescriptions/${prescriptionId}`)
+    apiFetch(`/api/clinical/prescriptions/${prescriptionId}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((data: Prescription) => setRx(data))
       .catch(() => setFetchError("Could not load prescription."))

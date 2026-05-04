@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useClinicalAuth } from "@/context/ClinicalAuthContext";
 import { useColors } from "@/hooks/useColors";
+import { apiFetch } from "@/lib/api";
 
 const CONDITION_COLORS: Record<string, { bg: string; text: string }> = {
   hypertension: { bg: "#FEE2E2", text: "#991B1B" },
@@ -57,7 +58,7 @@ export default function PatientsScreen() {
 
   const load = async () => {
     try {
-      const res = await fetch("/api/clinical-staff/patients", {
+      const res = await apiFetch("/api/clinical-staff/patients", {
         headers: { Authorization: `Bearer ${clinicalToken}` },
       });
       const data = await res.json();

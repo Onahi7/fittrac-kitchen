@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MealCard } from "@/components/MealCard";
 import { useApp } from "@/context/AppContext";
 import { useColors } from "@/hooks/useColors";
+import { apiFetch } from "@/lib/api";
 import {
   filterMealsForConditions,
   getTodayMenu,
@@ -61,7 +62,7 @@ export default function HomeScreen() {
   const [dailyQuote, setDailyQuote] = useState<DailyQuote | null>(null);
 
   useEffect(() => {
-    fetch("/api/admin/public/daily-quote")
+    apiFetch("/api/admin/public/daily-quote")
       .then((r) => r.ok ? r.json() : null)
       .then((q) => { if (q?.text) setDailyQuote(q); })
       .catch(() => {});

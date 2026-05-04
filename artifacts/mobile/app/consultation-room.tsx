@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "@/context/AppContext";
 import { useColors } from "@/hooks/useColors";
+import { apiFetch } from "@/lib/api";
 
 type PanelType = null | "chat" | "tests" | "prescription";
 
@@ -47,7 +48,7 @@ export default function ConsultationRoomScreen() {
 
   useEffect(() => {
     if (!consultationId) return;
-    fetch(`/api/clinical/test-requests/consultation/${consultationId}`)
+    apiFetch(`/api/clinical/test-requests/consultation/${consultationId}`)
       .then((r) => r.json())
       .then((data: any[]) => {
         if (Array.isArray(data)) {

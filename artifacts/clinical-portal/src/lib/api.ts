@@ -5,6 +5,14 @@ export class AuthError extends Error {
   }
 }
 
+const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
+export const API_BASE_URL = rawApiBaseUrl.replace(/\/$/, "");
+
+export function apiUrl(path: string) {
+  if (/^https?:\/\//.test(path)) return path;
+  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 export async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const token = localStorage.getItem("fk_clinical_token");
   
@@ -16,7 +24,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(url, { ...options, headers });
+  const response = await fetch(apiUrl(url), { ...options, headers });
 
   if (response.status === 401) {
     localStorage.removeItem("fk_clinical_token");

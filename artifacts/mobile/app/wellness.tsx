@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { apiFetch } from "@/lib/api";
 
 interface Specialist {
   id: string;
@@ -56,7 +57,7 @@ export default function WellnessScreen() {
   const [booked, setBooked] = useState(false);
 
   useEffect(() => {
-    fetch("/api/specialists")
+    apiFetch("/api/specialists")
       .then((r) => r.ok ? r.json() : { specialists: [] })
       .then((data) => {
         if (data.specialists?.length > 0) setSpecialists(data.specialists);
@@ -74,7 +75,7 @@ export default function WellnessScreen() {
     }
     try {
       if (token) {
-        await fetch("/api/auth/book-consultation", {
+        await apiFetch("/api/auth/book-consultation", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({

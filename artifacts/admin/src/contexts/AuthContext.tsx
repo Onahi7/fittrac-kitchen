@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { apiUrl } from "@/lib/api";
 
 interface AdminUser {
   username: string;
@@ -38,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (username: string, password: string) => {
     try {
-      const res = await fetch("/api/admin/login", {
+      const res = await fetch(apiUrl("/api/admin/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -61,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     if (user) {
       try {
-        await fetch("/api/admin/logout", {
+        await fetch(apiUrl("/api/admin/logout"), {
           method: "POST",
           headers: { Authorization: `Bearer ${user.token}` },
         });
@@ -88,7 +89,7 @@ export function useAuth() {
 export function useAdminFetch() {
   const { user, logout } = useAuth();
   return async (url: string, options: RequestInit = {}) => {
-    const res = await fetch(url, {
+    const res = await fetch(apiUrl(url), {
       ...options,
       headers: {
         ...options.headers,

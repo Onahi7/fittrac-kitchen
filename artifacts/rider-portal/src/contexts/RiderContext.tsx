@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { apiFetch } from "@/lib/api";
 
 export interface RiderOrder {
   id: string;
@@ -64,7 +65,7 @@ export function RiderProvider({ children }: { children: ReactNode }) {
     const savedToken = localStorage.getItem(TOKEN_KEY);
     if (!savedToken) { setIsLoading(false); return; }
     setToken(savedToken);
-    fetch("/api/riders/me", { headers: { Authorization: `Bearer ${savedToken}` } })
+    apiFetch("/api/riders/me", { headers: { Authorization: `Bearer ${savedToken}` } })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (data?.id) setRider(data as RiderProfile);
@@ -77,7 +78,7 @@ export function RiderProvider({ children }: { children: ReactNode }) {
   // Load stats when rider is set
   useEffect(() => {
     if (!token || !rider) return;
-    fetch("/api/riders/stats", { headers: { Authorization: `Bearer ${token}` } })
+    apiFetch("/api/riders/stats", { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (data) {
@@ -95,7 +96,7 @@ export function RiderProvider({ children }: { children: ReactNode }) {
       return;
     }
     const fetchOrders = () => {
-      fetch("/api/riders/available-orders", { headers: { Authorization: `Bearer ${token}` } })
+      apiFetch("/api/riders/available-orders", { headers: { Authorization: `Bearer ${token}` } })
         .then((r) => r.ok ? r.json() : { orders: [] })
         .then((data) => setAvailableOrders(data.orders ?? []))
         .catch(() => {});
@@ -107,7 +108,7 @@ export function RiderProvider({ children }: { children: ReactNode }) {
 
   const login = async (phone: string, pin: string): Promise<boolean> => {
     try {
-      const res = await fetch("/api/riders/login", {
+      const res = await apiFetch("/api/riders/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, pin }),
@@ -126,7 +127,7 @@ export function RiderProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     if (token) {
-      await fetch("/api/riders/logout", { method: "POST", headers: authHeaders() }).catch(() => {});
+      await apiFetch("/api/riders/logout", { method: "POST", headers: authHeaders() }).catch(() => {});
     }
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
@@ -144,7 +145,7 @@ export function RiderProvider({ children }: { children: ReactNode }) {
   const acceptOrder = async (order: RiderOrder) => {
     if (!token) return;
     try {
-      const res = await fetch("/api/riders/accept-order", {
+      const res = await apiFetch("/api/riders/accept-order", {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ orderId: order.orderId }),
@@ -161,7 +162,7 @@ export function RiderProvider({ children }: { children: ReactNode }) {
     if (!activeOrder || !token) return;
 
     if (activeDeliveryId) {
-      await fetch(`/api/riders/delivery/${activeDeliveryId}/status`, {
+      await apiFetch(`/api/riders/delivery/${activeDeliveryId}/status`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ status }),

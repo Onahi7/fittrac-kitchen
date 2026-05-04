@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useClinicalAuth } from "@/context/ClinicalAuthContext";
 import { useColors } from "@/hooks/useColors";
+import { apiFetch } from "@/lib/api";
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   "in-progress": { bg: "#E8F5E9", text: "#154212", label: "In Progress" },
@@ -44,7 +45,7 @@ export default function ScheduleScreen() {
 
   const load = async () => {
     try {
-      const res = await fetch("/api/clinical-staff/consultations", {
+      const res = await apiFetch("/api/clinical-staff/consultations", {
         headers: { Authorization: `Bearer ${clinicalToken}` },
       });
       const data = await res.json();

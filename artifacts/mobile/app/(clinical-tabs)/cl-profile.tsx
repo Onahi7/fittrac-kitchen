@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useClinicalAuth } from "@/context/ClinicalAuthContext";
 import { useColors } from "@/hooks/useColors";
+import { apiFetch } from "@/lib/api";
 
 export default function ProviderProfileScreen() {
   const colors = useColors();
@@ -24,7 +25,7 @@ export default function ProviderProfileScreen() {
   const [dashData, setDashData] = useState<any>(null);
 
   useEffect(() => {
-    fetch("/api/clinical-staff/dashboard", {
+    apiFetch("/api/clinical-staff/dashboard", {
       headers: { Authorization: `Bearer ${clinicalToken}` },
     })
       .then((r) => r.json())

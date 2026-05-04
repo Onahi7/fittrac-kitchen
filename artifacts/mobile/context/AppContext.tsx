@@ -20,6 +20,7 @@ import type {
   WeightLog,
 } from "@/constants/types";
 import { useAuth } from "@/context/AuthContext";
+import { apiFetch } from "@/lib/api";
 
 interface AppContextValue {
   profile: UserProfile;
@@ -113,7 +114,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (token) {
-      fetch("/api/auth/orders", { headers: { Authorization: `Bearer ${token}` } })
+      apiFetch("/api/auth/orders", { headers: { Authorization: `Bearer ${token}` } })
         .then((r) => r.json())
         .then((data) => {
           if (data.orders && data.orders.length > 0) {
@@ -142,7 +143,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const connect = async () => {
       try {
-        const res = await fetch("/api/events/stream", {
+        const res = await apiFetch("/api/events/stream", {
           headers: { Accept: "text/event-stream" },
         });
         if (!res.ok || !res.body) throw new Error("SSE unavailable");
@@ -273,7 +274,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     saveOrders(newOrders);
     setBasket([]);
     if (token) {
-      fetch("/api/auth/orders", {
+      apiFetch("/api/auth/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ items: order.items, fulfillment, address, total, paymentMethod, deliveryDate }),

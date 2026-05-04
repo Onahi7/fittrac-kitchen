@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { apiFetch } from "@/lib/api";
 
 interface AvailableTest { name: string; instructions: string; code: string; }
 interface TestUpload { code: string; uri: string | null; uploaded: boolean; }
@@ -32,7 +33,7 @@ export default function TestResultsScreen() {
   const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
-    fetch("/api/clinical/tests")
+    apiFetch("/api/clinical/tests")
       .then((r) => r.json())
       .then((data: any[]) => {
         const tests = data.map((t) => ({ name: t.name, instructions: t.instructions, code: t.name.replace(/\s+/g, "_").slice(0, 8) }));
@@ -75,7 +76,7 @@ export default function TestResultsScreen() {
     }
     setSubmitting(true);
     try {
-      await fetch("/api/clinical/test-results", {
+      await apiFetch("/api/clinical/test-results", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ consultationId, uploads: withFiles }),
